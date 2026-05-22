@@ -1,61 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import PostCard, { Post } from "./components/PostCard";
+import { useCallback, useEffect, useState } from "react";
+import FilterTabs from "./components/FilterTabs";
+import PostCard from "./components/PostCard";
 import StatsBar from "./components/StatsBar";
-import StatusBadge from "./components/StatusBadge";
+import type { Platform, Post, Stats, Status } from "./components/types";
 
-type StatusFilter =
-  | "all"
-  | "pending"
-  | "publishing"
-  | "published"
-  | "failed"
-  | "cancelled";
+type StatusFilter = "all" | Status;
+type PlatformFilter = "all" | Platform;
 
-interface Stats {
-  pending: number;
-  publishing: number;
-  published: number;
-  failed: number;
-  cancelled: number;
-}
-
-const FILTER_TABS: StatusFilter[] = [
-  "all",
-  "pending",
-  "publishing",
-  "published",
-  "failed",
-  "cancelled",
-];
-
-interface Toast {
-  id: number;
-  message: string;
-}
+const EMPTY_STATS: Stats = {
+  draft: 0,
+  scheduled: 0,
+  publishing: 0,
+  published: 0,
+  failed: 0,
+  total: 0,
+};
 
 export default function DashboardPage() {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [stats, setStats] = useState<Stats>({
-    pending: 0,
-    publishing: 0,
-    published: 0,
-    failed: 0,
-    cancelled: 0,
-  });
-  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [stats, setStats] = useState<Stats>(EMPTY_STATS);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   const [loading, setLoading] = useState(true);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const toastCounter = useRef(0);
-
-  const showToast = useCallback((message: string) => {
-    const id = ++toastCounter.current;
-    setToasts((prev) => [...prev, { id, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -63,8 +31,13 @@ export default function DashboardPage() {
         fetch("/api/posts"),
         fetch("/api/stats"),
       ]);
-      if (postsRes.ok) setPosts(await postsRes.json());
-      if (statsRes.ok) setStats(await statsRes.json());
+      if (postsRes.ok) {
+        const data = await postsRes.json();
+        setPosts(data.posts ?? data);
+      }
+      if (statsRes.ok) {
+        setStats(await statsRes.json());
+      }
     } finally {
       setLoading(false);
     }
@@ -76,75 +49,44 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const handleCancel = useCallback(
-    async (id: string) => {
-      setPosts((prev) => prev.filter((p) => p.id !== id));
-      setStats((prev) => ({
-        ...prev,
-        pending: Math.max(0, prev.pending - 1),
-        cancelled: prev.cancelled + 1,
-      }));
-      showToast("Post cancelled");
-      try {
-        await fetch(`/api/posts/${id}`, { method: "DELETE" });
-      } catch {
-        fetchData();
-      }
-    },
-    [showToast, fetchData]
-  );
-
-  const filteredPosts =
-    filter === "all" ? posts : posts.filter((p) => p.status === filter);
-
-  const countFor = (s: StatusFilter): number => {
-    if (s === "all") return posts.length;
-    return stats[s as keyof Stats] ?? 0;
-  };
+  const filteredPosts = posts.filter((p) => {
+    if (statusFilter !== "all" && p.status !== statusFilter) return false;
+    if (platformFilter !== "all" && !p.platforms.includes(platformFilter)) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-950">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-100">
-            Scheduled Posts
+      {/* Header */}
+      <div className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto px-4 py-4">
+          <h1 className="text-xl font-bold text-gray-100 tracking-tight">
+            Social Publisher
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Auto-refreshes every 30 seconds
+          <p className="text-xs text-gray-500 mt-0.5">
+            Read-only dashboard · auto-refreshes every 30s
           </p>
         </div>
+      </div>
 
+      <div className="max-w-2xl mx-auto px-4 py-8">
         <StatsBar stats={stats} />
 
-        <div className="flex flex-wrap gap-2 mb-6">
-          {FILTER_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setFilter(tab)}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filter === tab
-                  ? "bg-gray-700 text-gray-100"
-                  : "bg-gray-900 text-gray-400 hover:bg-gray-800 hover:text-gray-300"
-              }`}
-            >
-              {tab === "all" ? "All" : <StatusBadge status={tab} />}
-              <span
-                className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  filter === tab ? "bg-gray-600" : "bg-gray-800"
-                }`}
-              >
-                {countFor(tab)}
-              </span>
-            </button>
-          ))}
-        </div>
+        <FilterTabs
+          statusFilter={statusFilter}
+          platformFilter={platformFilter}
+          onStatusChange={setStatusFilter}
+          onPlatformChange={setPlatformFilter}
+          stats={stats}
+          totalCount={posts.length}
+        />
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="flex flex-col gap-6">
+            {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="bg-gray-900 border border-gray-800 rounded-xl p-5 h-48 animate-pulse"
+                className="bg-gray-900 border border-gray-800 rounded-xl h-64 animate-pulse"
               />
             ))}
           </div>
@@ -152,29 +94,18 @@ export default function DashboardPage() {
           <div className="flex flex-col items-center justify-center py-24 text-gray-600">
             <p className="text-lg font-medium">No posts found</p>
             <p className="text-sm mt-1">
-              {filter === "all"
-                ? "No scheduled posts yet"
-                : `No posts with status "${filter}"`}
+              {statusFilter === "all" && platformFilter === "all"
+                ? "Ask Hermes to create a post to get started"
+                : "Try adjusting your filters"}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-6">
             {filteredPosts.map((post) => (
-              <PostCard key={post.id} post={post} onCancel={handleCancel} />
+              <PostCard key={post.id} post={post} />
             ))}
           </div>
         )}
-      </div>
-
-      <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className="bg-gray-800 border border-gray-700 text-gray-200 text-sm px-4 py-2.5 rounded-lg shadow-lg"
-          >
-            {toast.message}
-          </div>
-        ))}
       </div>
     </div>
   );

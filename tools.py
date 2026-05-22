@@ -14,9 +14,11 @@ IMAGES_DIR = Path.home() / ".hermes" / "plugins" / "social-publisher" / "images"
 GPT_IMAGE_MODEL = "gpt-image-2"
 QUALITY_ALIASES = {
     "standard": "medium",
-    "hd": "medium",
-    "high": "medium",
+    "hd": "high",
+    "high": "high",
 }
+
+ALLOWED_PLATFORMS = {"linkedin_page", "facebook_page"}
 
 
 def _ensure_images_dir():
@@ -49,6 +51,66 @@ def _image_response_bytes(response) -> bytes:
         return img_response.content
 
     raise RuntimeError("OpenAI image response did not include image data")
+
+
+def _facebook_configured() -> bool:
+    return bool(
+        os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") and os.getenv("FACEBOOK_PAGE_ID")
+    )
+
+
+def _facebook_post(text: str, page_id: str, page_token: str, image_path: str | None = None):
+    """Publish a post to a Facebook page."""
+    if image_path:
+        url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
+        with open(image_path, "rb") as f:
+            resp = requests.post(
+                url,
+                data={"caption": text, "access_token": page_token},
+                files={"source": f},
+                timeout=120,
+            )
+    else:
+        url = f"https://graph.facebook.com/v19.0/{page_id}/feed"
+        resp = requests.post(
+            url,
+            json={"message": text, "access_token": page_token},
+            timeout=30,
+        )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _do_publish(post_id: str) -> None:
+    """
+    Publish the Facebook target of a stored post.
+    Called by the scheduler and publish_post tool.
+    If FB is not configured or the post has no facebook_page target, does nothing.
+    Updates post status on success or failure.
+    """
+    post = scheduler.get_post(post_id)
+    if post is None:
+        return
+
+    if "facebook_page" not in post["platforms"]:
+        return
+
+    if not _facebook_configured():
+        return
+
+    fb_token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
+    fb_page_id = os.getenv("FACEBOOK_PAGE_ID")
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        _facebook_post(post["text"], fb_page_id, fb_token, post.get("image_path"))
+        scheduler.update_post(
+            post_id,
+            status="published",
+            published_at=now,
+            error=None,
+        )
+    except Exception as e:
+        scheduler.update_post(post_id, status="failed", error=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -108,232 +170,126 @@ def enhance_image(params: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# LinkedIn helpers
+# Post tool handlers
 # ---------------------------------------------------------------------------
 
-def _linkedin_upload_image(image_path: str, author_urn: str, access_token: str) -> str:
-    """Upload an image to LinkedIn and return its asset URN."""
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "X-Restli-Protocol-Version": "2.0.0",
-    }
-    register_body = {
-        "registerUploadRequest": {
-            "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-            "owner": author_urn,
-            "serviceRelationships": [
-                {
-                    "relationshipType": "OWNER",
-                    "identifier": "urn:li:userGeneratedContent",
-                }
-            ],
-        }
-    }
-    reg_resp = requests.post(
-        "https://api.linkedin.com/v2/assets?action=registerUpload",
-        json=register_body,
-        headers=headers,
-        timeout=30,
-    )
-    reg_resp.raise_for_status()
-    reg_data = reg_resp.json()
-    upload_url = reg_data["value"]["uploadMechanism"][
-        "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
-    ]["uploadUrl"]
-    asset_urn = reg_data["value"]["asset"]
+def create_post(params: dict) -> str:
+    text = params.get("text", "").strip()
+    platforms = params.get("platforms", [])
+    image_path = params.get("image_path")
+    scheduled_time = params.get("scheduled_time")
 
-    with open(image_path, "rb") as f:
-        upload_resp = requests.put(
-            upload_url,
-            data=f,
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=120,
-        )
-    upload_resp.raise_for_status()
-    return asset_urn
+    try:
+        if not text:
+            return json.dumps({"error": "text is required"})
+        invalid = [p for p in platforms if p not in ALLOWED_PLATFORMS]
+        if invalid:
+            return json.dumps({"error": f"Invalid platforms: {invalid}. Allowed: {sorted(ALLOWED_PLATFORMS)}"})
+        if not platforms:
+            return json.dumps({"error": "platforms must contain at least one entry"})
+
+        post = scheduler.create_post(text, platforms, image_path, scheduled_time)
+
+        notes = []
+        if "linkedin_page" in platforms:
+            notes.append("LinkedIn posts are manual — copy the text from the dashboard and post manually.")
+        if "facebook_page" in platforms and not _facebook_configured():
+            notes.append("Facebook credentials are not configured — this Facebook post is manual.")
+
+        result = dict(post)
+        if notes:
+            result["note"] = " ".join(notes)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 
-def _linkedin_post(text: str, author_urn: str, access_token: str, asset_urn: str | None = None):
-    """Create a LinkedIn UGC post."""
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "X-Restli-Protocol-Version": "2.0.0",
-    }
-    share_content: dict = {
-        "shareCommentary": {"text": text},
-    }
-    if asset_urn:
-        share_content["shareMediaCategory"] = "IMAGE"
-        share_content["media"] = [
-            {
-                "status": "READY",
-                "media": asset_urn,
-            }
-        ]
-    else:
-        share_content["shareMediaCategory"] = "NONE"
+def update_post(params: dict) -> str:
+    post_id = params.get("post_id", "").strip()
+    try:
+        if not post_id:
+            return json.dumps({"error": "post_id is required"})
 
-    body = {
-        "author": author_urn,
-        "lifecycleState": "PUBLISHED",
-        "specificContent": {
-            "com.linkedin.ugc.ShareContent": share_content
-        },
-        "visibility": {
-            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-        },
-    }
-    resp = requests.post(
-        "https://api.linkedin.com/v2/ugcPosts",
-        json=body,
-        headers=headers,
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()
+        fields = {}
+        for key in ("text", "platforms", "image_path", "scheduled_time"):
+            if key in params:
+                fields[key] = params[key]
 
+        if "platforms" in fields:
+            invalid = [p for p in fields["platforms"] if p not in ALLOWED_PLATFORMS]
+            if invalid:
+                return json.dumps({"error": f"Invalid platforms: {invalid}"})
 
-# ---------------------------------------------------------------------------
-# Facebook helpers
-# ---------------------------------------------------------------------------
+        updated = scheduler.update_post(post_id, **fields)
+        if updated is None:
+            return json.dumps({"error": f"Post {post_id!r} not found or is already published"})
+        return json.dumps(updated)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
-def _facebook_post(text: str, page_id: str, page_token: str, image_path: str | None = None):
-    """Publish a post to a Facebook page."""
-    if image_path:
-        url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
-        with open(image_path, "rb") as f:
-            resp = requests.post(
-                url,
-                data={"caption": text, "access_token": page_token},
-                files={"source": f},
-                timeout=120,
-            )
-    else:
-        url = f"https://graph.facebook.com/v19.0/{page_id}/feed"
-        resp = requests.post(
-            url,
-            json={"message": text, "access_token": page_token},
-            timeout=30,
-        )
-    resp.raise_for_status()
-    return resp.json()
-
-
-# ---------------------------------------------------------------------------
-# Core publish logic (used by both handler and scheduler)
-# ---------------------------------------------------------------------------
-
-def _do_publish(text: str, targets: list, image_path: str | None) -> dict:
-    """
-    Publish to all targets. Raises on the first unrecoverable error.
-    Returns a dict mapping target -> result.
-    """
-    linkedin_token = os.getenv("LINKEDIN_ACCESS_TOKEN")
-    linkedin_page_urn = os.getenv("LINKEDIN_PAGE_URN")
-    fb_token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
-    fb_page_id = os.getenv("FACEBOOK_PAGE_ID")
-
-    results = {}
-
-    for target in targets:
-        try:
-            if target == "linkedin_page":
-                if not linkedin_token:
-                    raise RuntimeError("LINKEDIN_ACCESS_TOKEN not set")
-                if not linkedin_page_urn:
-                    raise RuntimeError("LINKEDIN_PAGE_URN not set")
-                asset_urn = None
-                if image_path:
-                    asset_urn = _linkedin_upload_image(image_path, linkedin_page_urn, linkedin_token)
-                resp = _linkedin_post(text, linkedin_page_urn, linkedin_token, asset_urn)
-                results[target] = {"status": "published", "response": resp}
-
-            elif target == "facebook_page":
-                if not fb_token:
-                    raise RuntimeError("FACEBOOK_PAGE_ACCESS_TOKEN not set")
-                if not fb_page_id:
-                    raise RuntimeError("FACEBOOK_PAGE_ID not set")
-                resp = _facebook_post(text, fb_page_id, fb_token, image_path)
-                results[target] = {"status": "published", "response": resp}
-
-            else:
-                results[target] = {"status": "error", "error": f"Unknown target: {target}"}
-
-        except Exception as e:
-            results[target] = {"status": "error", "error": str(e)}
-
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Tool handlers (return JSON strings)
-# ---------------------------------------------------------------------------
 
 def publish_post(params: dict) -> str:
-    text = params["text"]
-    targets = params["targets"]
-    image_path = params.get("image_path")
+    post_id = params.get("post_id", "").strip()
     try:
-        results = _do_publish(text, targets, image_path)
-        return json.dumps({"results": results})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+        if not post_id:
+            return json.dumps({"error": "post_id is required"})
 
+        post = scheduler.get_post(post_id)
+        if post is None:
+            return json.dumps({"error": f"Post {post_id!r} not found"})
 
-def schedule_post(params: dict) -> str:
-    text = params["text"]
-    targets = params["targets"]
-    scheduled_time = params["scheduled_time"]
-    image_path = params.get("image_path")
-    try:
-        post_id = scheduler.add_post(text, targets, image_path, scheduled_time)
-        return json.dumps({
-            "schedule_id": post_id,
-            "message": f"Post scheduled successfully. ID: {post_id}",
-            "targets": targets,
-            "scheduled_time": scheduled_time,
-        })
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-def list_scheduled_posts(params: dict) -> str:
-    try:
-        posts = scheduler.list_posts()
-        formatted = []
-        for p in posts:
-            # Convert UTC stored time to local for display
-            try:
-                utc_dt = datetime.fromisoformat(p["scheduled_time"])
-                local_dt = utc_dt.astimezone()
-                human_time = local_dt.strftime("%Y-%m-%d %H:%M %Z")
-            except Exception:
-                human_time = p["scheduled_time"]
-
-            formatted.append({
-                "id": p["id"],
-                "text_preview": p["text"][:100] + ("..." if len(p["text"]) > 100 else ""),
-                "targets": [t for t in p["targets"].split(",") if t],
-                "scheduled_time": human_time,
-                "has_image": bool(p.get("image_path")),
-            })
-        return json.dumps({"scheduled_posts": formatted, "count": len(formatted)})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-def cancel_scheduled_post(params: dict) -> str:
-    schedule_id = params["schedule_id"]
-    try:
-        cancelled = scheduler.cancel_post(schedule_id)
-        if cancelled:
-            return json.dumps({"success": True, "message": f"Post {schedule_id} has been cancelled."})
-        else:
+        if "facebook_page" not in post["platforms"]:
             return json.dumps({
-                "success": False,
-                "message": f"No pending post found with ID {schedule_id}. It may have already been published, cancelled, or does not exist.",
+                "note": "This post has no facebook_page target. Nothing to auto-publish — copy the text from the dashboard and post manually.",
+                "post": post,
             })
+
+        if not _facebook_configured():
+            return json.dumps({
+                "note": "Facebook credentials (FACEBOOK_PAGE_ACCESS_TOKEN / FACEBOOK_PAGE_ID) are not configured. This post is manual.",
+                "post": post,
+            })
+
+        scheduler.update_post(post_id, status="publishing")
+        _do_publish(post_id)
+        result = scheduler.get_post(post_id)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def list_posts(params: dict) -> str:
+    status = params.get("status")
+    try:
+        posts = scheduler.list_posts(status=status)
+        return json.dumps({"posts": posts, "count": len(posts)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def get_post(params: dict) -> str:
+    post_id = params.get("post_id", "").strip()
+    try:
+        if not post_id:
+            return json.dumps({"error": "post_id is required"})
+        post = scheduler.get_post(post_id)
+        if post is None:
+            return json.dumps({"error": f"Post {post_id!r} not found"})
+        return json.dumps(post)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def delete_post(params: dict) -> str:
+    post_id = params.get("post_id", "").strip()
+    try:
+        if not post_id:
+            return json.dumps({"error": "post_id is required"})
+        deleted = scheduler.delete_post(post_id)
+        if deleted:
+            return json.dumps({"success": True, "message": f"Post {post_id} deleted."})
+        return json.dumps({"success": False, "message": f"Post {post_id!r} not found."})
     except Exception as e:
         return json.dumps({"error": str(e)})

@@ -1,14 +1,16 @@
 name: social-publisher
-version: 1.0.0
-description: Create and publish content to LinkedIn Pages and Facebook with optional AI-generated or enhanced images
+version: 2.0.0
+description: "Create, store, and manage social posts for LinkedIn (manual) and Facebook (optional auto-publish), with AI image generation and a read-only review dashboard"
 author: toavinahajaina@gmail.com
 provides_tools:
   - generate_image
   - enhance_image
+  - create_post
+  - update_post
   - publish_post
-  - schedule_post
-  - list_scheduled_posts
-  - cancel_scheduled_post
+  - list_posts
+  - get_post
+  - delete_post
 provides_hooks:
   - startup
 requires_env:
@@ -16,18 +18,11 @@ requires_env:
     description: "OpenAI API key for GPT Image generation and enhancement"
     url: "https://platform.openai.com/api-keys"
     secret: true
-  - name: LINKEDIN_ACCESS_TOKEN
-    description: "LinkedIn OAuth 2.0 access token with w_organization_social scope"
-    url: "https://www.linkedin.com/developers/apps"
-    secret: true
-  - name: LINKEDIN_PAGE_URN
-    description: "Your LinkedIn organization/page URN, e.g. urn:li:organization:12345678"
-    secret: false
 optional_env:
   - name: FACEBOOK_PAGE_ACCESS_TOKEN
-    description: "Facebook page access token (from Graph API Explorer or long-lived token)"
+    description: "Facebook page access token — required for auto-publishing to Facebook. Without this, Facebook posts are manual."
     url: "https://developers.facebook.com/tools/explorer/"
     secret: true
   - name: FACEBOOK_PAGE_ID
-    description: "Numeric Facebook page ID"
+    description: "Numeric Facebook page ID — required alongside FACEBOOK_PAGE_ACCESS_TOKEN for auto-publishing."
     secret: false

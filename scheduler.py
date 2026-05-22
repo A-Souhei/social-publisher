@@ -18,20 +18,13 @@ def _get_conn():
     return conn
 
 
-def init_db():
-    with _get_conn() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS scheduled_posts (
-                id TEXT PRIMARY KEY,
-                text TEXT NOT NULL,
-                targets TEXT NOT NULL,
-                image_path TEXT,
-                scheduled_time TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL,
-                error TEXT
-            )
-        """)
+def _row_to_dict(row) -> dict:
+    d = dict(row)
+    if "platforms" in d and d["platforms"]:
+        d["platforms"] = [p.strip() for p in d["platforms"].split(",") if p.strip()]
+    else:
+        d["platforms"] = []
+    return d
 
 
 def _to_utc(dt_str: str) -> datetime:
@@ -42,39 +35,106 @@ def _to_utc(dt_str: str) -> datetime:
         raise ValueError(
             f"Invalid datetime format: {dt_str!r}. Use ISO 8601, e.g. '2025-01-15T14:30:00'"
         )
-    # astimezone works for both naive (assumes local) and aware datetimes
     return dt.astimezone(timezone.utc)
 
 
-def add_post(text: str, targets: list, image_path: str | None, scheduled_time: str) -> str:
-    scheduled_dt = _to_utc(scheduled_time)
-    if scheduled_dt <= datetime.now(timezone.utc):
-        raise ValueError("scheduled_time must be in the future")
+def init_db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with _get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS posts (
+                id TEXT PRIMARY KEY,
+                text TEXT NOT NULL,
+                platforms TEXT NOT NULL,
+                image_path TEXT,
+                scheduled_time TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                published_at TEXT,
+                error TEXT
+            )
+        """)
+
+
+def create_post(
+    text: str,
+    platforms: list,
+    image_path: str | None,
+    scheduled_time: str | None,
+) -> dict:
     post_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    scheduled_utc = None
+    if scheduled_time:
+        scheduled_utc = _to_utc(scheduled_time).isoformat()
+    status = "scheduled" if scheduled_utc else "draft"
     with _lock, _get_conn() as conn:
         conn.execute(
-            "INSERT INTO scheduled_posts(id, text, targets, image_path, scheduled_time, status, created_at) "
+            "INSERT INTO posts(id, text, platforms, image_path, scheduled_time, status, created_at) "
             "VALUES (?,?,?,?,?,?,?)",
-            (post_id, text, ",".join(targets), image_path, scheduled_dt.isoformat(), "pending", now),
+            (post_id, text, ",".join(platforms), image_path, scheduled_utc, status, now),
         )
-    return post_id
+    return get_post(post_id)
 
 
-def list_posts() -> list:
-    with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM scheduled_posts WHERE status='pending' ORDER BY scheduled_time"
-        ).fetchall()
-    return [dict(r) for r in rows]
+def update_post(post_id: str, **fields) -> dict | None:
+    existing = get_post(post_id)
+    if existing is None:
+        return None
+    if existing["status"] == "published":
+        raise ValueError(f"Cannot edit post {post_id}: already published")
 
+    now = datetime.now(timezone.utc).isoformat()
+    allowed = {"text", "platforms", "image_path", "scheduled_time", "status", "published_at", "error"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
 
-def cancel_post(post_id: str) -> bool:
+    # Coerce platforms list to CSV
+    if "platforms" in updates and isinstance(updates["platforms"], list):
+        updates["platforms"] = ",".join(updates["platforms"])
+
+    # Coerce scheduled_time to UTC ISO
+    if "scheduled_time" in updates and updates["scheduled_time"] is not None:
+        updates["scheduled_time"] = _to_utc(updates["scheduled_time"]).isoformat()
+
+    # Recompute status from scheduled_time unless status is explicitly passed
+    if "scheduled_time" in updates and "status" not in updates:
+        updates["status"] = "scheduled" if updates["scheduled_time"] else "draft"
+
+    updates["updated_at"] = now
+
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    values = list(updates.values()) + [post_id]
     with _lock, _get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE scheduled_posts SET status='cancelled' WHERE id=? AND status='pending'",
-            (post_id,),
-        )
+        conn.execute(f"UPDATE posts SET {set_clause} WHERE id = ?", values)
+    return get_post(post_id)
+
+
+def get_post(post_id: str) -> dict | None:
+    with _get_conn() as conn:
+        row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+    if row is None:
+        return None
+    return _row_to_dict(row)
+
+
+def list_posts(status: str | None = None) -> list:
+    with _get_conn() as conn:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM posts WHERE status = ? ORDER BY COALESCE(scheduled_time, created_at) DESC",
+                (status,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM posts ORDER BY COALESCE(scheduled_time, created_at) DESC"
+            ).fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
+def delete_post(post_id: str) -> bool:
+    with _lock, _get_conn() as conn:
+        cur = conn.execute("DELETE FROM posts WHERE id = ?", (post_id,))
         return cur.rowcount > 0
 
 
@@ -84,27 +144,21 @@ def _scheduler_loop():
             now = datetime.now(timezone.utc).isoformat()
             with _lock, _get_conn() as conn:
                 due = conn.execute(
-                    "SELECT * FROM scheduled_posts WHERE status='pending' AND scheduled_time <= ?",
+                    "SELECT * FROM posts WHERE status = 'scheduled' AND scheduled_time <= ? AND platforms LIKE '%facebook_page%'",
                     (now,),
                 ).fetchall()
                 for row in due:
                     conn.execute(
-                        "UPDATE scheduled_posts SET status='publishing' WHERE id=?",
-                        (row["id"],),
+                        "UPDATE posts SET status = 'publishing', updated_at = ? WHERE id = ?",
+                        (now, row["id"]),
                     )
 
             for row in due:
-                targets = [t for t in row["targets"].split(",") if t]
+                post_id = row["id"]
                 try:
-                    _publish_fn(row["text"], targets, row["image_path"] or None)
-                    status, err = "published", None
-                except Exception as e:
-                    status, err = "failed", str(e)
-                with _lock, _get_conn() as conn:
-                    conn.execute(
-                        "UPDATE scheduled_posts SET status=?, error=? WHERE id=?",
-                        (status, err, row["id"]),
-                    )
+                    _publish_fn(post_id)
+                except Exception:
+                    pass
         except Exception:
             pass
 

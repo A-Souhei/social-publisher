@@ -61,12 +61,14 @@ ENHANCE_IMAGE = {
     }
 }
 
-PUBLISH_POST = {
-    "name": "publish_post",
+CREATE_POST = {
+    "name": "create_post",
     "description": (
-        "Publish a post immediately to one or more social media targets. "
-        "Supported targets: linkedin_page, facebook_page. "
-        "Can optionally include an image by providing a local file path."
+        "Create and store a social media post for LinkedIn and/or Facebook. "
+        "LinkedIn posts are always manual — the user copies the text from the dashboard and posts manually. "
+        "Facebook posts auto-publish (immediately or at the scheduled time) only if FACEBOOK_PAGE_ACCESS_TOKEN "
+        "and FACEBOOK_PAGE_ID are configured; otherwise they are stored for manual reference. "
+        "Returns the stored post with its ID and status."
     ),
     "parameters": {
         "type": "object",
@@ -75,80 +77,135 @@ PUBLISH_POST = {
                 "type": "string",
                 "description": "The post text content"
             },
-            "targets": {
+            "platforms": {
                 "type": "array",
                 "items": {
                     "type": "string",
                     "enum": ["linkedin_page", "facebook_page"]
                 },
-                "description": "List of platforms/accounts to publish to",
+                "description": "Target platforms. linkedin_page = manual copy-paste; facebook_page = auto-publish if FB is configured.",
                 "minItems": 1
             },
             "image_path": {
                 "type": "string",
-                "description": "Optional: absolute local file path to an image to include in the post"
-            }
-        },
-        "required": ["text", "targets"]
-    }
-}
-
-SCHEDULE_POST = {
-    "name": "schedule_post",
-    "description": (
-        "Schedule a post to be published at a specific future date and time. "
-        "The post will be automatically published when the scheduled time arrives. "
-        "Returns a schedule ID that can be used to cancel the post."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "text": {
-                "type": "string",
-                "description": "The post text content"
-            },
-            "targets": {
-                "type": "array",
-                "items": {
-                    "type": "string",
-                    "enum": ["linkedin_page", "facebook_page"]
-                },
-                "description": "List of platforms/accounts to publish to",
-                "minItems": 1
+                "description": "Optional: absolute local file path to an image to attach"
             },
             "scheduled_time": {
                 "type": "string",
-                "description": "ISO 8601 datetime string for when to publish, e.g. '2025-01-15T14:30:00' or '2025-01-15T14:30:00+03:00'. If no timezone is given, local time is assumed."
-            },
-            "image_path": {
-                "type": "string",
-                "description": "Optional: absolute local file path to an image to include in the post"
+                "description": (
+                    "Optional ISO 8601 datetime for when to publish, e.g. '2025-06-01T14:30:00' or "
+                    "'2025-06-01T14:30:00+03:00'. If omitted, post is saved as a draft. "
+                    "Naive datetimes are treated as local time."
+                )
             }
         },
-        "required": ["text", "targets", "scheduled_time"]
+        "required": ["text", "platforms"]
     }
 }
 
-LIST_SCHEDULED_POSTS = {
-    "name": "list_scheduled_posts",
-    "description": "List all pending scheduled social media posts with their IDs, content preview, targets, and scheduled times.",
-    "parameters": {
-        "type": "object",
-        "properties": {}
-    }
-}
-
-CANCEL_SCHEDULED_POST = {
-    "name": "cancel_scheduled_post",
-    "description": "Cancel a scheduled post before it is published. Use the schedule ID returned by schedule_post or list_scheduled_posts.",
+UPDATE_POST = {
+    "name": "update_post",
+    "description": (
+        "Modify a stored post's text, platforms, image, or schedule by ID. "
+        "Use this to revise drafts ('change the wording', 'move it to Friday', 'add an image'). "
+        "Cannot edit posts that are already published."
+    ),
     "parameters": {
         "type": "object",
         "properties": {
-            "schedule_id": {
+            "post_id": {
                 "type": "string",
-                "description": "The schedule ID of the post to cancel"
+                "description": "ID of the post to update"
+            },
+            "text": {
+                "type": "string",
+                "description": "New post text"
+            },
+            "platforms": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": ["linkedin_page", "facebook_page"]
+                },
+                "description": "Updated list of target platforms"
+            },
+            "image_path": {
+                "type": "string",
+                "description": "New image path, or null to remove the image"
+            },
+            "scheduled_time": {
+                "type": "string",
+                "description": "New scheduled time (ISO 8601). Pass null to revert to draft."
             }
         },
-        "required": ["schedule_id"]
+        "required": ["post_id"]
+    }
+}
+
+PUBLISH_POST = {
+    "name": "publish_post",
+    "description": (
+        "Immediately publish a stored post's Facebook target now. "
+        "Requires Facebook credentials (FACEBOOK_PAGE_ACCESS_TOKEN and FACEBOOK_PAGE_ID) to be configured. "
+        "If the post has no facebook_page target or FB is not configured, this returns a clear note — "
+        "the post is manual and no status change is made."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "post_id": {
+                "type": "string",
+                "description": "ID of the post to publish"
+            }
+        },
+        "required": ["post_id"]
+    }
+}
+
+LIST_POSTS = {
+    "name": "list_posts",
+    "description": (
+        "List stored posts with full metadata. "
+        "Optionally filter by status: draft, scheduled, publishing, published, or failed."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "status": {
+                "type": "string",
+                "enum": ["draft", "scheduled", "publishing", "published", "failed"],
+                "description": "Optional status filter. Omit to list all posts."
+            }
+        }
+    }
+}
+
+GET_POST = {
+    "name": "get_post",
+    "description": "Fetch a single stored post by ID with all metadata.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "post_id": {
+                "type": "string",
+                "description": "ID of the post to retrieve"
+            }
+        },
+        "required": ["post_id"]
+    }
+}
+
+DELETE_POST = {
+    "name": "delete_post",
+    "description": "Delete a stored post by ID. This permanently removes the post record.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "post_id": {
+                "type": "string",
+                "description": "ID of the post to delete"
+            }
+        },
+        "required": ["post_id"]
     }
 }
