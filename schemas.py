@@ -15,7 +15,7 @@ GENERATE_IMAGE = {
             "size": {
                 "type": "string",
                 "enum": ["auto", "1024x1024", "1536x1024", "1024x1536", "1792x1024", "1024x1792"],
-                "description": "Output image dimensions. Use auto when no exact aspect ratio is required."
+                "description": "Output image dimensions. Defaults to 1024x1024 (lowest cost) when omitted. Only request a larger size like 1536x1024 (landscape) or 1024x1536 (portrait) when the aspect ratio genuinely matters."
             },
             "quality": {
                 "type": "string",
@@ -49,7 +49,7 @@ ENHANCE_IMAGE = {
             "size": {
                 "type": "string",
                 "enum": ["auto", "1024x1024", "1536x1024", "1024x1536", "1792x1024", "1024x1792"],
-                "description": "Output image dimensions"
+                "description": "Output image dimensions. Defaults to 1024x1024 (lowest cost) when omitted."
             },
             "quality": {
                 "type": "string",
