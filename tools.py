@@ -75,10 +75,22 @@ def _facebook_post(text: str, page_id: str, page_token: str, image_path: str | N
         url = f"https://graph.facebook.com/v19.0/{page_id}/feed"
         resp = requests.post(
             url,
-            json={"message": text, "access_token": page_token},
+            data={"message": text, "access_token": page_token},
             timeout=30,
         )
-    resp.raise_for_status()
+    if not resp.ok:
+        # Surface the Graph API error detail; raise_for_status() alone hides it.
+        detail = resp.text
+        try:
+            err = resp.json().get("error", {})
+            detail = (
+                f"{err.get('message', '')} "
+                f"(type={err.get('type')}, code={err.get('code')}, "
+                f"subcode={err.get('error_subcode')}, fbtrace_id={err.get('fbtrace_id')})"
+            )
+        except Exception:
+            pass
+        raise RuntimeError(f"Facebook {resp.status_code} on {url}: {detail}")
     return resp.json()
 
 
