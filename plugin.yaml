@@ -1,0 +1,36 @@
+name: social-publisher
+version: 1.0.0
+description: Create and publish content to LinkedIn and Facebook with optional AI-generated or enhanced images
+author: toavinahajaina@gmail.com
+provides_tools:
+  - generate_image
+  - enhance_image
+  - publish_post
+  - schedule_post
+  - list_scheduled_posts
+  - cancel_scheduled_post
+provides_hooks:
+  - startup
+requires_env:
+  - name: OPENAI_API_KEY
+    description: "OpenAI API key for DALL-E image generation and enhancement"
+    url: "https://platform.openai.com/api-keys"
+    secret: true
+  - name: LINKEDIN_ACCESS_TOKEN
+    description: "LinkedIn OAuth 2.0 access token with w_member_social and w_organization_social scopes"
+    url: "https://www.linkedin.com/developers/apps"
+    secret: true
+  - name: LINKEDIN_PERSON_URN
+    description: "Your LinkedIn person URN, e.g. urn:li:person:ABC123"
+    secret: false
+optional_env:
+  - name: LINKEDIN_PAGE_URN
+    description: "Your LinkedIn organization/page URN, e.g. urn:li:organization:12345678"
+    secret: false
+  - name: FACEBOOK_PAGE_ACCESS_TOKEN
+    description: "Facebook page access token (from Graph API Explorer or long-lived token)"
+    url: "https://developers.facebook.com/tools/explorer/"
+    secret: true
+  - name: FACEBOOK_PAGE_ID
+    description: "Numeric Facebook page ID"
+    secret: false

@@ -1,0 +1,6 @@
+images/*
+!images/.gitkeep
+__pycache__/
+*.pyc
+schedule.db
+.env
