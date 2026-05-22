@@ -13,7 +13,7 @@ provides_hooks:
   - startup
 requires_env:
   - name: OPENAI_API_KEY
-    description: "OpenAI API key for DALL-E image generation and enhancement"
+    description: "OpenAI API key for GPT Image generation and enhancement"
     url: "https://platform.openai.com/api-keys"
     secret: true
   - name: LINKEDIN_ACCESS_TOKEN
