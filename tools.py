@@ -118,7 +118,7 @@ def _do_publish(post_id: str) -> None:
 # Image tools
 # ---------------------------------------------------------------------------
 
-def generate_image(params: dict) -> str:
+def generate_image(params: dict, **kwargs) -> str:
     prompt = params["prompt"]
     size = params.get("size", "auto")
     quality = _normalize_quality(params.get("quality"))
@@ -139,7 +139,7 @@ def generate_image(params: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
-def enhance_image(params: dict) -> str:
+def enhance_image(params: dict, **kwargs) -> str:
     image_path = params["image_path"]
     instruction = params["instruction"]
     size = params.get("size", "auto")
@@ -174,7 +174,7 @@ def enhance_image(params: dict) -> str:
 # Post tool handlers
 # ---------------------------------------------------------------------------
 
-def create_post(params: dict) -> str:
+def create_post(params: dict, **kwargs) -> str:
     text = params.get("text", "").strip()
     platforms = params.get("platforms", [])
     image_path = params.get("image_path")
@@ -207,7 +207,7 @@ def create_post(params: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
-def update_post(params: dict) -> str:
+def update_post(params: dict, **kwargs) -> str:
     post_id = params.get("post_id", "").strip()
     try:
         if not post_id:
@@ -238,7 +238,7 @@ def update_post(params: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
-def publish_post(params: dict) -> str:
+def publish_post(params: dict, **kwargs) -> str:
     post_id = params.get("post_id", "").strip()
     try:
         if not post_id:
@@ -268,7 +268,7 @@ def publish_post(params: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
-def list_posts(params: dict) -> str:
+def list_posts(params: dict, **kwargs) -> str:
     status = params.get("status")
     try:
         posts = scheduler.list_posts(status=status)
@@ -277,7 +277,7 @@ def list_posts(params: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
-def get_post(params: dict) -> str:
+def get_post(params: dict, **kwargs) -> str:
     post_id = params.get("post_id", "").strip()
     try:
         if not post_id:
@@ -290,7 +290,7 @@ def get_post(params: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
-def delete_post(params: dict) -> str:
+def delete_post(params: dict, **kwargs) -> str:
     post_id = params.get("post_id", "").strip()
     try:
         if not post_id:
