@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      - DB_PATH=/data/schedule.db
+    volumes:
+      - db_data:/data
+    ports:
+      - "37421:37421"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      - BACKEND_URL=http://backend:37421
+    ports:
+      - "52847:52847"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  db_data:
