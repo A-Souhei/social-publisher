@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import FilterTabs from "./components/FilterTabs";
 import PostCard from "./components/PostCard";
 import StatsBar from "./components/StatsBar";
+import ThemeToggle from "./components/ThemeToggle";
 import type { Platform, Post, Stats, Status } from "./components/types";
 
 type StatusFilter = "all" | Status;
@@ -56,16 +58,29 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Header */}
-      <div className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-100 tracking-tight">
-            Social Publisher
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Read-only dashboard · auto-refreshes every 30s
-          </p>
+      <div className="border-b border-gray-200 bg-gray-50/80 dark:border-gray-800 dark:bg-gray-950/80 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Image
+              src="/logo.svg"
+              alt="Social Publisher logo"
+              width={36}
+              height={36}
+              className="rounded-[10px] shadow-sm flex-shrink-0"
+              priority
+            />
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-slate-900 dark:text-gray-100 tracking-tight leading-tight">
+                Social Publisher
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-gray-500 mt-0.5">
+                Read-only dashboard · auto-refreshes every 30s
+              </p>
+            </div>
+          </div>
+          <ThemeToggle />
         </div>
       </div>
 
@@ -86,12 +101,12 @@ export default function DashboardPage() {
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="bg-gray-900 border border-gray-800 rounded-xl h-64 animate-pulse"
+                className="bg-white border border-gray-200 dark:bg-gray-900 dark:border-gray-800 rounded-xl h-64 animate-pulse"
               />
             ))}
           </div>
         ) : filteredPosts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-gray-600">
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400 dark:text-gray-600">
             <p className="text-lg font-medium">No posts found</p>
             <p className="text-sm mt-1">
               {statusFilter === "all" && platformFilter === "all"
