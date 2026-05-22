@@ -231,7 +231,6 @@ def _do_publish(text: str, targets: list, image_path: str | None) -> dict:
     Returns a dict mapping target -> result.
     """
     linkedin_token = os.getenv("LINKEDIN_ACCESS_TOKEN")
-    linkedin_person_urn = os.getenv("LINKEDIN_PERSON_URN")
     linkedin_page_urn = os.getenv("LINKEDIN_PAGE_URN")
     fb_token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
     fb_page_id = os.getenv("FACEBOOK_PAGE_ID")
@@ -240,18 +239,7 @@ def _do_publish(text: str, targets: list, image_path: str | None) -> dict:
 
     for target in targets:
         try:
-            if target == "linkedin_profile":
-                if not linkedin_token:
-                    raise RuntimeError("LINKEDIN_ACCESS_TOKEN not set")
-                if not linkedin_person_urn:
-                    raise RuntimeError("LINKEDIN_PERSON_URN not set")
-                asset_urn = None
-                if image_path:
-                    asset_urn = _linkedin_upload_image(image_path, linkedin_person_urn, linkedin_token)
-                resp = _linkedin_post(text, linkedin_person_urn, linkedin_token, asset_urn)
-                results[target] = {"status": "published", "response": resp}
-
-            elif target == "linkedin_page":
+            if target == "linkedin_page":
                 if not linkedin_token:
                     raise RuntimeError("LINKEDIN_ACCESS_TOKEN not set")
                 if not linkedin_page_urn:

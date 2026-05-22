@@ -65,7 +65,7 @@ PUBLISH_POST = {
     "name": "publish_post",
     "description": (
         "Publish a post immediately to one or more social media targets. "
-        "Supported targets: linkedin_profile, linkedin_page, facebook_page. "
+        "Supported targets: linkedin_page, facebook_page. "
         "Can optionally include an image by providing a local file path."
     ),
     "parameters": {
@@ -79,7 +79,7 @@ PUBLISH_POST = {
                 "type": "array",
                 "items": {
                     "type": "string",
-                    "enum": ["linkedin_profile", "linkedin_page", "facebook_page"]
+                    "enum": ["linkedin_page", "facebook_page"]
                 },
                 "description": "List of platforms/accounts to publish to",
                 "minItems": 1
@@ -111,7 +111,7 @@ SCHEDULE_POST = {
                 "type": "array",
                 "items": {
                     "type": "string",
-                    "enum": ["linkedin_profile", "linkedin_page", "facebook_page"]
+                    "enum": ["linkedin_page", "facebook_page"]
                 },
                 "description": "List of platforms/accounts to publish to",
                 "minItems": 1

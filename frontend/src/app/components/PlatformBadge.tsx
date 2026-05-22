@@ -1,10 +1,6 @@
-type PlatformKey = "linkedin_profile" | "linkedin_page" | "facebook_page";
+type PlatformKey = "linkedin_page" | "facebook_page";
 
 const PLATFORM_META: Record<PlatformKey, { label: string; styles: string }> = {
-  linkedin_profile: {
-    label: "LinkedIn Profile",
-    styles: "bg-blue-600/20 text-blue-400 border border-blue-600/30",
-  },
   linkedin_page: {
     label: "LinkedIn Page",
     styles: "bg-blue-600/20 text-blue-400 border border-blue-600/30",
