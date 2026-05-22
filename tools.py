@@ -14,7 +14,8 @@ IMAGES_DIR = Path.home() / ".hermes" / "plugins" / "social-publisher" / "images"
 GPT_IMAGE_MODEL = "gpt-image-2"
 QUALITY_ALIASES = {
     "standard": "medium",
-    "hd": "high",
+    "hd": "medium",
+    "high": "medium",
 }
 
 
