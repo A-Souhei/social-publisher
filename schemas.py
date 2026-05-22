@@ -64,8 +64,12 @@ ENHANCE_IMAGE = {
 CREATE_POST = {
     "name": "create_post",
     "description": (
-        "Create and store a social media post for LinkedIn and/or Facebook. "
-        "LinkedIn posts are always manual — the user copies the text from the dashboard and posts manually. "
+        "REQUIRED to save a post. Call this whenever the user asks to draft, write, create, compose, "
+        "prepare, or schedule a social media post — 'drafting a post' ALWAYS means storing it with this "
+        "tool, not just replying with the text. The post only appears in the review dashboard after this "
+        "call; if you skip it, the work is lost. If you generated or enhanced an image for this post "
+        "(e.g. with generate_image), pass the file path it returned as image_path. "
+        "LinkedIn posts are manual — the user copies the text from the dashboard and posts manually. "
         "Facebook posts auto-publish (immediately or at the scheduled time) only if FACEBOOK_PAGE_ACCESS_TOKEN "
         "and FACEBOOK_PAGE_ID are configured; otherwise they are stored for manual reference. "
         "Returns the stored post with its ID and status."
@@ -88,7 +92,11 @@ CREATE_POST = {
             },
             "image_path": {
                 "type": "string",
-                "description": "Optional: absolute local file path to an image to attach"
+                "description": (
+                    "Optional: absolute local file path to an image to attach. If you just generated an "
+                    "image with generate_image, pass the file_path it returned here so the image is stored "
+                    "with the post and shown in the dashboard."
+                )
             },
             "scheduled_time": {
                 "type": "string",
