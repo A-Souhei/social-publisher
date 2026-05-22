@@ -60,18 +60,42 @@ export default function PostCard({ post }: PostCardProps) {
   );
   const [idCopied, setIdCopied] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(post.text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+  const copyToClipboard = async (value: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return true;
+      }
+    } catch {
+      // fall through to legacy fallback (e.g. insecure context / denied permission)
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = value;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
   };
 
-  const handleCopyId = () => {
-    navigator.clipboard.writeText(post.id).then(() => {
+  const handleCopy = async () => {
+    if (await copyToClipboard(post.text)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleCopyId = async () => {
+    if (await copyToClipboard(post.id)) {
       setIdCopied(true);
       setTimeout(() => setIdCopied(false), 1500);
-    });
+    }
   };
 
   const multiPlatform = post.platforms.length > 1;

@@ -183,6 +183,8 @@ def create_post(params: dict) -> str:
     try:
         if not text:
             return json.dumps({"error": "text is required"})
+        if not isinstance(platforms, list) or not all(isinstance(p, str) for p in platforms):
+            return json.dumps({"error": "platforms must be a list of strings, e.g. [\"linkedin_page\", \"facebook_page\"]"})
         invalid = [p for p in platforms if p not in ALLOWED_PLATFORMS]
         if invalid:
             return json.dumps({"error": f"Invalid platforms: {invalid}. Allowed: {sorted(ALLOWED_PLATFORMS)}"})
@@ -217,9 +219,14 @@ def update_post(params: dict) -> str:
                 fields[key] = params[key]
 
         if "platforms" in fields:
-            invalid = [p for p in fields["platforms"] if p not in ALLOWED_PLATFORMS]
+            platforms = fields["platforms"]
+            if not isinstance(platforms, list) or not all(isinstance(p, str) for p in platforms):
+                return json.dumps({"error": "platforms must be a list of strings, e.g. [\"linkedin_page\", \"facebook_page\"]"})
+            if not platforms:
+                return json.dumps({"error": "platforms must contain at least one entry"})
+            invalid = [p for p in platforms if p not in ALLOWED_PLATFORMS]
             if invalid:
-                return json.dumps({"error": f"Invalid platforms: {invalid}"})
+                return json.dumps({"error": f"Invalid platforms: {invalid}. Allowed: {sorted(ALLOWED_PLATFORMS)}"})
 
         updated = scheduler.update_post(post_id, **fields)
         if updated is None:

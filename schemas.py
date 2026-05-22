@@ -127,14 +127,15 @@ UPDATE_POST = {
                     "type": "string",
                     "enum": ["linkedin_page", "facebook_page"]
                 },
-                "description": "Updated list of target platforms"
+                "minItems": 1,
+                "description": "Updated list of target platforms (at least one)"
             },
             "image_path": {
-                "type": "string",
+                "type": ["string", "null"],
                 "description": "New image path, or null to remove the image"
             },
             "scheduled_time": {
-                "type": "string",
+                "type": ["string", "null"],
                 "description": "New scheduled time (ISO 8601). Pass null to revert to draft."
             }
         },
