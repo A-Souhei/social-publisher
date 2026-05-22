@@ -1,7 +1,7 @@
 GENERATE_IMAGE = {
     "name": "generate_image",
     "description": (
-        "Generate an AI image from a text prompt using DALL-E 3. "
+        "Generate an AI image from a text prompt using GPT Image. "
         "Returns a local file path to the generated PNG image. "
         "Use this when the user wants an AI-created image for their post."
     ),
@@ -14,13 +14,13 @@ GENERATE_IMAGE = {
             },
             "size": {
                 "type": "string",
-                "enum": ["1024x1024", "1792x1024", "1024x1792"],
-                "description": "Image dimensions. Use 1792x1024 for landscape, 1024x1792 for portrait, 1024x1024 for square."
+                "enum": ["auto", "1024x1024", "1536x1024", "1024x1536", "1792x1024", "1024x1792"],
+                "description": "Output image dimensions. Use auto when no exact aspect ratio is required."
             },
             "quality": {
                 "type": "string",
-                "enum": ["standard", "hd"],
-                "description": "Image quality. hd produces finer details and greater consistency."
+                "enum": ["auto", "low", "medium", "high", "standard", "hd"],
+                "description": "Image quality. standard maps to medium and hd maps to high for compatibility."
             }
         },
         "required": ["prompt"]
@@ -48,8 +48,13 @@ ENHANCE_IMAGE = {
             },
             "size": {
                 "type": "string",
-                "enum": ["1024x1024", "1792x1024", "1024x1792"],
+                "enum": ["auto", "1024x1024", "1536x1024", "1024x1536", "1792x1024", "1024x1792"],
                 "description": "Output image dimensions"
+            },
+            "quality": {
+                "type": "string",
+                "enum": ["auto", "low", "medium", "high", "standard", "hd"],
+                "description": "Image quality. standard maps to medium and hd maps to high for compatibility."
             }
         },
         "required": ["image_path", "instruction"]

@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+import base64
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,6 +11,11 @@ from openai import OpenAI
 from . import scheduler
 
 IMAGES_DIR = Path.home() / ".hermes" / "plugins" / "social-publisher" / "images"
+GPT_IMAGE_MODEL = "gpt-image-2"
+QUALITY_ALIASES = {
+    "standard": "medium",
+    "hd": "high",
+}
 
 
 def _ensure_images_dir():
@@ -23,30 +29,47 @@ def _openai_client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
+def _normalize_quality(quality: str | None) -> str:
+    if not quality:
+        return "auto"
+    return QUALITY_ALIASES.get(quality, quality)
+
+
+def _image_response_bytes(response) -> bytes:
+    image = response.data[0]
+    image_base64 = getattr(image, "b64_json", None)
+    if image_base64:
+        return base64.b64decode(image_base64)
+
+    image_url = getattr(image, "url", None)
+    if image_url:
+        img_response = requests.get(image_url, timeout=60)
+        img_response.raise_for_status()
+        return img_response.content
+
+    raise RuntimeError("OpenAI image response did not include image data")
+
+
 # ---------------------------------------------------------------------------
 # Image tools
 # ---------------------------------------------------------------------------
 
 def generate_image(params: dict) -> str:
     prompt = params["prompt"]
-    size = params.get("size", "1024x1024")
-    quality = params.get("quality", "standard")
+    size = params.get("size", "auto")
+    quality = _normalize_quality(params.get("quality"))
     try:
         _ensure_images_dir()
         client = _openai_client()
         response = client.images.generate(
-            model="dall-e-3",
+            model=GPT_IMAGE_MODEL,
             prompt=prompt,
             size=size,
             quality=quality,
-            response_format="url",
             n=1,
         )
-        image_url = response.data[0].url
         file_path = IMAGES_DIR / f"{uuid.uuid4()}.png"
-        img_response = requests.get(image_url, timeout=60)
-        img_response.raise_for_status()
-        file_path.write_bytes(img_response.content)
+        file_path.write_bytes(_image_response_bytes(response))
         return json.dumps({"file_path": str(file_path), "prompt": prompt})
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -55,34 +78,29 @@ def generate_image(params: dict) -> str:
 def enhance_image(params: dict) -> str:
     image_path = params["image_path"]
     instruction = params["instruction"]
-    size = params.get("size", "1024x1024")
-    # dall-e-2 edit only supports 256x256, 512x512, 1024x1024
-    edit_size = "1024x1024"
+    size = params.get("size", "auto")
+    quality = _normalize_quality(params.get("quality"))
     try:
         _ensure_images_dir()
         from PIL import Image
-        import io
-
-        # Convert source image to RGBA PNG in memory
-        with Image.open(image_path) as img:
-            rgba_img = img.convert("RGBA")
-            buf = io.BytesIO()
-            rgba_img.save(buf, format="PNG")
-            buf.seek(0)
+        import tempfile
 
         client = _openai_client()
-        response = client.images.edit(
-            image=buf,
-            prompt=instruction,
-            n=1,
-            size=edit_size,
-            response_format="url",
-        )
-        image_url = response.data[0].url
+        with Image.open(image_path) as img, tempfile.NamedTemporaryFile(suffix=".png") as image_file:
+            rgba_img = img.convert("RGBA")
+            rgba_img.save(image_file, format="PNG")
+            image_file.seek(0)
+
+            response = client.images.edit(
+                model=GPT_IMAGE_MODEL,
+                image=image_file,
+                prompt=instruction,
+                n=1,
+                size=size,
+                quality=quality,
+            )
         out_path = IMAGES_DIR / f"{uuid.uuid4()}_enhanced.png"
-        img_response = requests.get(image_url, timeout=60)
-        img_response.raise_for_status()
-        out_path.write_bytes(img_response.content)
+        out_path.write_bytes(_image_response_bytes(response))
         return json.dumps({"file_path": str(out_path), "original_path": image_path})
     except Exception as e:
         return json.dumps({"error": str(e)})

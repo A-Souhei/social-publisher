@@ -5,8 +5,8 @@ A [Hermes agent](https://hermes-agent.nousresearch.com/) plugin for creating and
 ## Features
 
 - **Publish** to LinkedIn (personal profile + pages) and Facebook pages
-- **AI image generation** via DALL-E 3
-- **AI image enhancement** via DALL-E 2 edit
+- **AI image generation** via GPT Image
+- **AI image enhancement** via GPT Image edits
 - **Schedule posts** at a date and time of your choice
 - **Web dashboard** to visualize and manage scheduled posts
 
@@ -14,8 +14,8 @@ A [Hermes agent](https://hermes-agent.nousresearch.com/) plugin for creating and
 
 | Tool | Description |
 |---|---|
-| `generate_image` | Generate an image from a text prompt (DALL-E 3) |
-| `enhance_image` | Enhance or edit an existing image (DALL-E 2) |
+| `generate_image` | Generate an image from a text prompt (GPT Image) |
+| `enhance_image` | Enhance or edit an existing image (GPT Image) |
 | `publish_post` | Publish immediately to one or more targets |
 | `schedule_post` | Schedule a post for a specific date and time |
 | `list_scheduled_posts` | List all pending scheduled posts |
