@@ -1,17 +1,17 @@
-import { Ban, CheckCircle, Clock, XCircle } from "lucide-react";
-
-interface Stats {
-  pending: number;
-  publishing: number;
-  published: number;
-  failed: number;
-  cancelled: number;
-}
+import { CheckCircle2, Clock, FileText, XCircle } from "lucide-react";
+import type { Stats } from "./types";
 
 const STAT_CARDS = [
   {
-    key: "pending" as const,
-    label: "Pending",
+    key: "draft" as const,
+    label: "Draft",
+    icon: FileText,
+    iconClass: "text-slate-400",
+    cardClass: "border-slate-500/20",
+  },
+  {
+    key: "scheduled" as const,
+    label: "Scheduled",
     icon: Clock,
     iconClass: "text-amber-400",
     cardClass: "border-amber-500/20",
@@ -19,7 +19,7 @@ const STAT_CARDS = [
   {
     key: "published" as const,
     label: "Published",
-    icon: CheckCircle,
+    icon: CheckCircle2,
     iconClass: "text-green-400",
     cardClass: "border-green-500/20",
   },
@@ -29,13 +29,6 @@ const STAT_CARDS = [
     icon: XCircle,
     iconClass: "text-red-400",
     cardClass: "border-red-500/20",
-  },
-  {
-    key: "cancelled" as const,
-    label: "Cancelled",
-    icon: Ban,
-    iconClass: "text-gray-400",
-    cardClass: "border-gray-500/20",
   },
 ];
 

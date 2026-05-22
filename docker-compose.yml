@@ -3,8 +3,12 @@ services:
     build: ./backend
     environment:
       - DB_PATH=/data/schedule.db
+      - IMAGES_DIR=/data/images
     volumes:
       - db_data:/data
+      # To use the real Hermes database and images, replace the volume above with:
+      # - /home/USER/.hermes/plugins/social-publisher/schedule.db:/data/schedule.db
+      # - /home/USER/.hermes/plugins/social-publisher/images:/data/images
     ports:
       - "37421:37421"
     restart: unless-stopped

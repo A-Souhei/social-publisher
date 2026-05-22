@@ -4,3 +4,10 @@ __pycache__/
 *.pyc
 schedule.db
 .env
+.idea/
+
+# frontend
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo

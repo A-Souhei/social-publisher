@@ -1,9 +1,7 @@
-import os
 from . import schemas, tools, scheduler
 
 
 def register(ctx):
-    # Start the background scheduler, wiring it to the core publish function
     scheduler.start_scheduler(tools._do_publish)
 
     ctx.register_tool(
@@ -19,26 +17,38 @@ def register(ctx):
         handler=tools.enhance_image,
     )
     ctx.register_tool(
+        name="create_post",
+        toolset="social-publisher",
+        schema=schemas.CREATE_POST,
+        handler=tools.create_post,
+    )
+    ctx.register_tool(
+        name="update_post",
+        toolset="social-publisher",
+        schema=schemas.UPDATE_POST,
+        handler=tools.update_post,
+    )
+    ctx.register_tool(
         name="publish_post",
         toolset="social-publisher",
         schema=schemas.PUBLISH_POST,
         handler=tools.publish_post,
     )
     ctx.register_tool(
-        name="schedule_post",
+        name="list_posts",
         toolset="social-publisher",
-        schema=schemas.SCHEDULE_POST,
-        handler=tools.schedule_post,
+        schema=schemas.LIST_POSTS,
+        handler=tools.list_posts,
     )
     ctx.register_tool(
-        name="list_scheduled_posts",
+        name="get_post",
         toolset="social-publisher",
-        schema=schemas.LIST_SCHEDULED_POSTS,
-        handler=tools.list_scheduled_posts,
+        schema=schemas.GET_POST,
+        handler=tools.get_post,
     )
     ctx.register_tool(
-        name="cancel_scheduled_post",
+        name="delete_post",
         toolset="social-publisher",
-        schema=schemas.CANCEL_SCHEDULED_POST,
-        handler=tools.cancel_scheduled_post,
+        schema=schemas.DELETE_POST,
+        handler=tools.delete_post,
     )

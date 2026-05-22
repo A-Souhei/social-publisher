@@ -1,14 +1,12 @@
 # social-publisher
 
-A [Hermes agent](https://hermes-agent.nousresearch.com/) plugin for creating and publishing content to LinkedIn and Facebook, with AI image generation, image enhancement, and post scheduling.
+A [Hermes agent](https://hermes-agent.nousresearch.com/) plugin for creating and managing social media posts for LinkedIn and Facebook, with AI image generation and a read-only review dashboard.
 
-## Features
+## How it works
 
-- **Publish** to LinkedIn (personal profile + pages) and Facebook pages
-- **AI image generation** via GPT Image
-- **AI image enhancement** via GPT Image edits
-- **Schedule posts** at a date and time of your choice
-- **Web dashboard** to visualize and manage scheduled posts
+- **LinkedIn**: always manual. Hermes creates and stores the post; you copy the text from the dashboard and paste it on LinkedIn yourself.
+- **Facebook**: auto-publishes if `FACEBOOK_PAGE_ACCESS_TOKEN` and `FACEBOOK_PAGE_ID` are set. Without those keys, Facebook posts are also manual.
+- **Images**: generated or enhanced via OpenAI GPT Image and stored locally. The dashboard lets you view and open them.
 
 ## Plugin tools
 
@@ -16,12 +14,14 @@ A [Hermes agent](https://hermes-agent.nousresearch.com/) plugin for creating and
 |---|---|
 | `generate_image` | Generate an image from a text prompt (GPT Image) |
 | `enhance_image` | Enhance or edit an existing image (GPT Image) |
-| `publish_post` | Publish immediately to one or more targets |
-| `schedule_post` | Schedule a post for a specific date and time |
-| `list_scheduled_posts` | List all pending scheduled posts |
-| `cancel_scheduled_post` | Cancel a scheduled post by ID |
+| `create_post` | Create and store a post for LinkedIn and/or Facebook |
+| `update_post` | Edit a stored post's text, platforms, image, or schedule |
+| `publish_post` | Immediately publish a post's Facebook target (requires FB credentials) |
+| `list_posts` | List stored posts with full metadata, optionally filtered by status |
+| `get_post` | Fetch a single post by ID |
+| `delete_post` | Delete a stored post by ID |
 
-Supported targets: `linkedin_profile`, `linkedin_page`, `facebook_page`
+Supported platforms: `linkedin_page`, `facebook_page`
 
 ## Installation
 
@@ -42,11 +42,8 @@ scp -r . user@your-server:~/.hermes/plugins/social-publisher/
 ```bash
 # Required
 export OPENAI_API_KEY="sk-..."
-export LINKEDIN_ACCESS_TOKEN="AQX..."
-export LINKEDIN_PERSON_URN="urn:li:person:YOUR_ID"
 
-# Optional
-export LINKEDIN_PAGE_URN="urn:li:organization:YOUR_ORG_ID"
+# Optional — only needed for Facebook auto-publishing
 export FACEBOOK_PAGE_ACCESS_TOKEN="EAA..."
 export FACEBOOK_PAGE_ID="123456789"
 ```
@@ -56,9 +53,6 @@ export FACEBOOK_PAGE_ID="123456789"
 | Credential | Where to get it |
 |---|---|
 | `OPENAI_API_KEY` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `LINKEDIN_ACCESS_TOKEN` | LinkedIn Developer App → OAuth 2.0 token with `w_member_social` + `w_organization_social` scopes |
-| `LINKEDIN_PERSON_URN` | `GET https://api.linkedin.com/v2/me` → use the `id` field as `urn:li:person:{id}` |
-| `LINKEDIN_PAGE_URN` | `urn:li:organization:` + your org's numeric ID (visible in the page admin URL) |
 | `FACEBOOK_PAGE_ACCESS_TOKEN` | [Meta Graph API Explorer](https://developers.facebook.com/tools/explorer/) → generate a page token |
 | `FACEBOOK_PAGE_ID` | Your page's About section or Graph API Explorer |
 
@@ -70,7 +64,7 @@ hermes plugins enable social-publisher
 
 ## Web dashboard
 
-A web dashboard lets you visualize and cancel scheduled posts.
+A read-only dashboard lets you review posts, copy text for manual posting, and view images.
 
 ### Run with Docker Compose
 
@@ -81,21 +75,32 @@ docker compose up --build
 - Dashboard: [http://localhost:52847](http://localhost:52847)
 - API: [http://localhost:37421](http://localhost:37421)
 
-### Connecting to the real Hermes DB
+### Connecting to the real Hermes DB and images
 
-By default the dashboard uses an isolated Docker volume. To point it at the actual Hermes scheduler database, update the backend volume in `docker-compose.yml`:
+By default the dashboard uses an isolated Docker volume. To point it at the actual Hermes data, update the backend volumes in `docker-compose.yml`:
 
 ```yaml
 backend:
   volumes:
-    - /path/to/.hermes/plugins/social-publisher/schedule.db:/data/schedule.db
+    - /home/USER/.hermes/plugins/social-publisher/schedule.db:/data/schedule.db
+    - /home/USER/.hermes/plugins/social-publisher/images:/data/images
 ```
+
+## Post statuses
+
+| Status | Meaning |
+|---|---|
+| `draft` | Stored, no scheduled time |
+| `scheduled` | Has a future scheduled_time; Facebook target will auto-publish when due (if FB configured) |
+| `publishing` | Being published right now |
+| `published` | Successfully published to Facebook |
+| `failed` | Facebook publish attempt failed — check the error field |
 
 ## Notes
 
-- Facebook personal profile posting is not supported — Meta's Graph API restricts this for third-party apps. Facebook Pages work fully.
-- Scheduled posts are stored in a local SQLite database (`schedule.db`) and published by a background thread inside the Hermes process.
+- LinkedIn posts never auto-publish. Use the dashboard to copy post text and paste it manually.
 - Images are saved to `~/.hermes/plugins/social-publisher/images/` on the Hermes server.
+- Scheduled posts are checked every 30 seconds by a background thread inside the Hermes process.
 
 ## License
 
