@@ -2,6 +2,7 @@ import json
 import os
 import uuid
 import base64
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,17 +61,47 @@ def _facebook_configured() -> bool:
     )
 
 
+def _prepare_facebook_image(image_path: str) -> str:
+    """Downscale and recompress an image so it stays well under Facebook's
+    upload limits (Facebook recommends well below its 4 MB cap, and large PNGs
+    are rejected/pixelated). Returns a path to a temporary JPEG; the caller is
+    responsible for deleting it."""
+    from PIL import Image
+
+    MAX_DIM = 1440
+    MAX_BYTES = 3_500_000
+    with Image.open(image_path) as src:
+        img = src.convert("RGB")
+        img.thumbnail((MAX_DIM, MAX_DIM))  # preserves aspect ratio, only shrinks
+
+    fd, tmp = tempfile.mkstemp(suffix=".jpg")
+    os.close(fd)
+    quality = 85
+    img.save(tmp, format="JPEG", quality=quality, optimize=True)
+    while os.path.getsize(tmp) > MAX_BYTES and quality > 40:
+        quality -= 15
+        img.save(tmp, format="JPEG", quality=quality, optimize=True)
+    return tmp
+
+
 def _facebook_post(text: str, page_id: str, page_token: str, image_path: str | None = None):
     """Publish a post to a Facebook page."""
     if image_path:
         url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
-        with open(image_path, "rb") as f:
-            resp = requests.post(
-                url,
-                data={"caption": text, "access_token": page_token},
-                files={"source": f},
-                timeout=120,
-            )
+        prepared = _prepare_facebook_image(image_path)
+        try:
+            with open(prepared, "rb") as f:
+                resp = requests.post(
+                    url,
+                    data={"caption": text, "access_token": page_token},
+                    files={"source": f},
+                    timeout=120,
+                )
+        finally:
+            try:
+                os.remove(prepared)
+            except OSError:
+                pass
     else:
         url = f"https://graph.facebook.com/v19.0/{page_id}/feed"
         resp = requests.post(
@@ -132,7 +163,7 @@ def _do_publish(post_id: str) -> None:
 
 def generate_image(params: dict, **kwargs) -> str:
     prompt = params["prompt"]
-    size = params.get("size", "auto")
+    size = params.get("size", "1024x1024")
     quality = _normalize_quality(params.get("quality"))
     try:
         _ensure_images_dir()
@@ -154,12 +185,11 @@ def generate_image(params: dict, **kwargs) -> str:
 def enhance_image(params: dict, **kwargs) -> str:
     image_path = params["image_path"]
     instruction = params["instruction"]
-    size = params.get("size", "auto")
+    size = params.get("size", "1024x1024")
     quality = _normalize_quality(params.get("quality"))
     try:
         _ensure_images_dir()
         from PIL import Image
-        import tempfile
 
         client = _openai_client()
         with Image.open(image_path) as img, tempfile.NamedTemporaryFile(suffix=".png") as image_file:
