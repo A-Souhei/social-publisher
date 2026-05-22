@@ -12,10 +12,11 @@ from . import scheduler
 
 IMAGES_DIR = Path.home() / ".hermes" / "plugins" / "social-publisher" / "images"
 GPT_IMAGE_MODEL = "gpt-image-2"
+# Cap quality at "medium" — "high"/"hd" is significantly more expensive.
 QUALITY_ALIASES = {
     "standard": "medium",
-    "hd": "high",
-    "high": "high",
+    "hd": "medium",
+    "high": "medium",
 }
 
 ALLOWED_PLATFORMS = {"linkedin_page", "facebook_page"}

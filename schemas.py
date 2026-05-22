@@ -19,8 +19,8 @@ GENERATE_IMAGE = {
             },
             "quality": {
                 "type": "string",
-                "enum": ["auto", "low", "medium", "standard", "hd"],
-                "description": "Image quality is capped at medium. standard and hd map to medium for compatibility."
+                "enum": ["auto", "low", "medium"],
+                "description": "Image quality, capped at medium to control cost. Higher tiers (high/hd) are not available."
             }
         },
         "required": ["prompt"]
@@ -53,8 +53,8 @@ ENHANCE_IMAGE = {
             },
             "quality": {
                 "type": "string",
-                "enum": ["auto", "low", "medium", "standard", "hd"],
-                "description": "Image quality is capped at medium. standard and hd map to medium for compatibility."
+                "enum": ["auto", "low", "medium"],
+                "description": "Image quality, capped at medium to control cost. Higher tiers (high/hd) are not available."
             }
         },
         "required": ["image_path", "instruction"]
