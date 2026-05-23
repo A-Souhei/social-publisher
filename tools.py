@@ -61,7 +61,13 @@ def _facebook_pages() -> list[dict]:
 
     Scans for FACEBOOK_PAGE_<N>_NAME keys, reads the corresponding _ID and
     _TOKEN for each N, and returns only complete triples sorted by N.
-    Falls back to the legacy single-page env vars if no numbered pages found.
+
+    Numbered mode is opt-in: if any FACEBOOK_PAGE_<N>_(NAME|ID|TOKEN) var is
+    present, only complete numbered triples are used and the legacy single-page
+    vars are ignored (an incomplete triple yields an empty list rather than
+    silently routing to the legacy page). The legacy single-page env vars
+    (FACEBOOK_PAGE_ACCESS_TOKEN + FACEBOOK_PAGE_ID) are used only when no
+    numbered vars are present at all.
     """
     name_pattern = re.compile(r"^FACEBOOK_PAGE_(\d+)_NAME$")
     numbered_key = re.compile(r"^FACEBOOK_PAGE_\d+_(NAME|ID|TOKEN)$")
