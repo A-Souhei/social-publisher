@@ -55,6 +55,10 @@ def init_db():
                 error TEXT
             )
         """)
+        # Migrate: add fb_page column if not present
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(posts)").fetchall()}
+        if "fb_page" not in cols:
+            conn.execute("ALTER TABLE posts ADD COLUMN fb_page TEXT")
 
 
 def create_post(
@@ -62,6 +66,7 @@ def create_post(
     platforms: list,
     image_path: str | None,
     scheduled_time: str | None,
+    fb_page: str | None = None,
 ) -> dict:
     post_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -71,9 +76,9 @@ def create_post(
     status = "scheduled" if scheduled_utc else "draft"
     with _lock, _get_conn() as conn:
         conn.execute(
-            "INSERT INTO posts(id, text, platforms, image_path, scheduled_time, status, created_at) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (post_id, text, ",".join(platforms), image_path, scheduled_utc, status, now),
+            "INSERT INTO posts(id, text, platforms, image_path, scheduled_time, status, created_at, fb_page) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (post_id, text, ",".join(platforms), image_path, scheduled_utc, status, now, fb_page),
         )
     return get_post(post_id)
 
@@ -86,7 +91,7 @@ def update_post(post_id: str, **fields) -> dict | None:
         raise ValueError(f"Cannot edit post {post_id}: already published")
 
     now = datetime.now(timezone.utc).isoformat()
-    allowed = {"text", "platforms", "image_path", "scheduled_time", "status", "published_at", "error"}
+    allowed = {"text", "platforms", "image_path", "scheduled_time", "status", "published_at", "error", "fb_page"}
     updates = {k: v for k, v in fields.items() if k in allowed}
 
     # Coerce platforms list to CSV

@@ -160,6 +160,7 @@ export default function PostCard({ post }: PostCardProps) {
             imageUrl={post.image_url}
             scheduledTime={post.scheduled_time}
             createdAt={post.created_at}
+            pageName={post.fb_page}
           />
         ) : (
           <LinkedInPreview

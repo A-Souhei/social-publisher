@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 import base64
 import tempfile
@@ -55,9 +56,59 @@ def _image_response_bytes(response) -> bytes:
     raise RuntimeError("OpenAI image response did not include image data")
 
 
+def _facebook_pages() -> list[dict]:
+    """Discover configured Facebook pages from numbered env vars.
+
+    Scans for FACEBOOK_PAGE_<N>_NAME keys, reads the corresponding _ID and
+    _TOKEN for each N, and returns only complete triples sorted by N.
+    Falls back to the legacy single-page env vars if no numbered pages found.
+    """
+    pattern = re.compile(r"^FACEBOOK_PAGE_(\d+)_NAME$")
+    numbered: dict[int, dict] = {}
+    for key, value in os.environ.items():
+        m = pattern.match(key)
+        if m:
+            n = int(m.group(1))
+            name = value.strip()
+            page_id = os.getenv(f"FACEBOOK_PAGE_{n}_ID", "").strip()
+            token = os.getenv(f"FACEBOOK_PAGE_{n}_TOKEN", "").strip()
+            if name and page_id and token:
+                numbered[n] = {"name": name, "id": page_id, "token": token}
+
+    if numbered:
+        return [numbered[n] for n in sorted(numbered)]
+
+    # Legacy fallback: single page from FACEBOOK_PAGE_ACCESS_TOKEN + FACEBOOK_PAGE_ID
+    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "").strip()
+    page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip()
+    if token and page_id:
+        name = os.getenv("FACEBOOK_PAGE_NAME", "default").strip() or "default"
+        return [{"name": name, "id": page_id, "token": token}]
+
+    return []
+
+
 def _facebook_configured() -> bool:
-    return bool(
-        os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") and os.getenv("FACEBOOK_PAGE_ID")
+    return bool(_facebook_pages())
+
+
+def _resolve_facebook_page(name: str | None) -> dict:
+    pages = _facebook_pages()
+    if not pages:
+        raise RuntimeError("No Facebook pages are configured")
+    if name and name.strip():
+        needle = name.strip().casefold()
+        for page in pages:
+            if page["name"].strip().casefold() == needle:
+                return page
+        raise RuntimeError(
+            f"Unknown Facebook page '{name}'. Configured pages: {[p['name'] for p in pages]}"
+        )
+    if len(pages) == 1:
+        return pages[0]
+    raise RuntimeError(
+        f"Multiple Facebook pages are configured; specify which one. "
+        f"Available: {[p['name'] for p in pages]}"
     )
 
 
@@ -142,11 +193,10 @@ def _do_publish(post_id: str) -> None:
     if not _facebook_configured():
         return
 
-    fb_token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
-    fb_page_id = os.getenv("FACEBOOK_PAGE_ID")
     now = datetime.now(timezone.utc).isoformat()
     try:
-        _facebook_post(post["text"], fb_page_id, fb_token, post.get("image_path"))
+        page = _resolve_facebook_page(post.get("fb_page"))
+        _facebook_post(post["text"], page["id"], page["token"], post.get("image_path"))
         scheduler.update_post(
             post_id,
             status="published",
@@ -216,11 +266,19 @@ def enhance_image(params: dict, **kwargs) -> str:
 # Post tool handlers
 # ---------------------------------------------------------------------------
 
+def list_facebook_pages(params: dict, **kwargs) -> str:
+    pages = _facebook_pages()
+    if not pages:
+        return json.dumps({"pages": [], "count": 0, "note": "No Facebook pages configured"})
+    return json.dumps({"pages": [p["name"] for p in pages], "count": len(pages)})
+
+
 def create_post(params: dict, **kwargs) -> str:
     text = params.get("text", "").strip()
     platforms = params.get("platforms", [])
     image_path = params.get("image_path")
     scheduled_time = params.get("scheduled_time")
+    facebook_page_param = params.get("facebook_page")
 
     try:
         if not text:
@@ -233,13 +291,24 @@ def create_post(params: dict, **kwargs) -> str:
         if not platforms:
             return json.dumps({"error": "platforms must contain at least one entry"})
 
-        post = scheduler.create_post(text, platforms, image_path, scheduled_time)
-
+        fb_page = None
         notes = []
+        if "facebook_page" in platforms:
+            if _facebook_configured():
+                try:
+                    page = _resolve_facebook_page(facebook_page_param)
+                    fb_page = page["name"]
+                except RuntimeError as e:
+                    return json.dumps({"error": str(e)})
+            else:
+                notes.append("Facebook credentials are not configured — this Facebook post is manual.")
+
+        post = scheduler.create_post(text, platforms, image_path, scheduled_time, fb_page=fb_page)
+
         if "linkedin_page" in platforms:
             notes.append("LinkedIn posts are manual — copy the text from the dashboard and post manually.")
-        if "facebook_page" in platforms and not _facebook_configured():
-            notes.append("Facebook credentials are not configured — this Facebook post is manual.")
+        if fb_page:
+            notes.append(f"Facebook post targets page '{fb_page}' (auto-publishes).")
 
         result = dict(post)
         if notes:
@@ -269,6 +338,13 @@ def update_post(params: dict, **kwargs) -> str:
             invalid = [p for p in platforms if p not in ALLOWED_PLATFORMS]
             if invalid:
                 return json.dumps({"error": f"Invalid platforms: {invalid}. Allowed: {sorted(ALLOWED_PLATFORMS)}"})
+
+        if "facebook_page" in params:
+            try:
+                page = _resolve_facebook_page(params["facebook_page"])
+                fields["fb_page"] = page["name"]
+            except RuntimeError as e:
+                return json.dumps({"error": str(e)})
 
         updated = scheduler.update_post(post_id, **fields)
         if updated is None:

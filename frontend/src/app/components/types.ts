@@ -15,6 +15,7 @@ export interface Post {
   updated_at: string | null;
   published_at: string | null;
   error: string | null;
+  fb_page: string | null;
 }
 
 export interface Stats {
