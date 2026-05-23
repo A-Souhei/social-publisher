@@ -53,8 +53,12 @@ export FACEBOOK_PAGE_ID="123456789"
 | Credential | Where to get it |
 |---|---|
 | `OPENAI_API_KEY` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `FACEBOOK_PAGE_ACCESS_TOKEN` | [Meta Graph API Explorer](https://developers.facebook.com/tools/explorer/) → generate a page token |
+| `FACEBOOK_PAGE_ACCESS_TOKEN` | A **long-lived page token** (see note below) |
 | `FACEBOOK_PAGE_ID` | Your page's About section or Graph API Explorer |
+
+> **Facebook token — important:** the token you copy straight from the Graph API Explorer is *short-lived* (~1h) and will fail later with `code 190 / subcode 463 "Session has expired"`. You need a **long-lived page token** (`expires_at: 0`). Full step-by-step guide, including the common pitfalls (user-vs-page token, the `(#100) nonexisting field (accounts)` error, App Secret handling, and the "post is Public but only I can see it" → Page visibility issue):
+>
+> 📌 biblion forum **`fr_boldwombat`** — *"How to create the Facebook long-lived (non-expiring) page token"* (join with `forum_join`).
 
 ### 4. Enable the plugin
 
