@@ -11,6 +11,7 @@ provides_tools:
   - list_posts
   - get_post
   - delete_post
+  - list_facebook_pages
 provides_hooks:
   - startup
 requires_env:
@@ -19,10 +20,23 @@ requires_env:
     url: "https://platform.openai.com/api-keys"
     secret: true
 optional_env:
+  - name: FACEBOOK_PAGE_1_NAME
+    description: "Display name for your first Facebook page (e.g. 'Sahan\\'aina'). Add more pages by incrementing the number: FACEBOOK_PAGE_2_NAME, FACEBOOK_PAGE_3_NAME, etc."
+    secret: false
+  - name: FACEBOOK_PAGE_1_ID
+    description: "Numeric Facebook page ID for page 1. Pair with FACEBOOK_PAGE_1_NAME and FACEBOOK_PAGE_1_TOKEN."
+    secret: false
+  - name: FACEBOOK_PAGE_1_TOKEN
+    description: "Long-lived Facebook page access token for page 1. Pair with FACEBOOK_PAGE_1_NAME and FACEBOOK_PAGE_1_ID."
+    url: "https://developers.facebook.com/tools/explorer/"
+    secret: true
   - name: FACEBOOK_PAGE_ACCESS_TOKEN
-    description: "Facebook page access token — required for auto-publishing to Facebook. Without this, Facebook posts are manual."
+    description: "Legacy single-page token (fallback). Used only when no FACEBOOK_PAGE_<N>_* vars are found. Pair with FACEBOOK_PAGE_ID."
     url: "https://developers.facebook.com/tools/explorer/"
     secret: true
   - name: FACEBOOK_PAGE_ID
-    description: "Numeric Facebook page ID — required alongside FACEBOOK_PAGE_ACCESS_TOKEN for auto-publishing."
+    description: "Legacy single-page ID (fallback). Used only when no FACEBOOK_PAGE_<N>_* vars are found. Pair with FACEBOOK_PAGE_ACCESS_TOKEN."
+    secret: false
+  - name: FACEBOOK_PAGE_NAME
+    description: "Display name for the legacy single page (fallback). Defaults to 'default' if unset."
     secret: false

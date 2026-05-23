@@ -6,6 +6,7 @@ interface FacebookPreviewProps {
   imageUrl: string | null;
   scheduledTime: string | null;
   createdAt: string;
+  pageName?: string | null;
 }
 
 function relativeTime(iso: string | null): string {
@@ -30,6 +31,7 @@ export default function FacebookPreview({
   imageUrl,
   scheduledTime,
   createdAt,
+  pageName,
 }: FacebookPreviewProps) {
   const displayTime = relativeTime(scheduledTime ?? createdAt);
 
@@ -47,11 +49,11 @@ export default function FacebookPreview({
           className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
           style={{ backgroundColor: "#1877F2" }}
         >
-          Y
+          {(pageName ?? "Your Facebook Page")[0].toUpperCase()}
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900 leading-tight">
-            Your Facebook Page
+            {pageName ?? "Your Facebook Page"}
           </p>
           <div className="flex items-center gap-1 text-xs text-gray-500">
             <span>{displayTime}</span>

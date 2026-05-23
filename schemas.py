@@ -105,6 +105,15 @@ CREATE_POST = {
                     "'2025-06-01T14:30:00+03:00'. If omitted, post is saved as a draft. "
                     "Naive datetimes are treated as local time."
                 )
+            },
+            "facebook_page": {
+                "type": "string",
+                "description": (
+                    "Which Facebook page to post to, by name (e.g. 'Sahan\\'aina'). Required when "
+                    "platforms includes facebook_page and more than one page is configured — if the "
+                    "user says 'post to <page>', pass that name here. Use list_facebook_pages to see "
+                    "the available names."
+                )
             }
         },
         "required": ["text", "platforms"]
@@ -145,9 +154,27 @@ UPDATE_POST = {
             "scheduled_time": {
                 "type": ["string", "null"],
                 "description": "New scheduled time (ISO 8601). Pass null to revert to draft."
+            },
+            "facebook_page": {
+                "type": "string",
+                "description": (
+                    "Which Facebook page to post to, by name (e.g. 'Sahan\\'aina'). Required when "
+                    "platforms includes facebook_page and more than one page is configured — if the "
+                    "user says 'post to <page>', pass that name here. Use list_facebook_pages to see "
+                    "the available names."
+                )
             }
         },
         "required": ["post_id"]
+    }
+}
+
+LIST_FACEBOOK_PAGES = {
+    "name": "list_facebook_pages",
+    "description": "List the configured Facebook pages you can publish to (by name).",
+    "parameters": {
+        "type": "object",
+        "properties": {}
     }
 }
 

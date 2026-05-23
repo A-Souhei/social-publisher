@@ -44,6 +44,7 @@ def row_to_post(row: aiosqlite.Row) -> dict:
         "updated_at": row["updated_at"],
         "published_at": row["published_at"],
         "error": row["error"],
+        "fb_page": row["fb_page"] if "fb_page" in row.keys() else None,
     }
 
 

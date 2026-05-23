@@ -52,3 +52,9 @@ def register(ctx):
         schema=schemas.DELETE_POST,
         handler=tools.delete_post,
     )
+    ctx.register_tool(
+        name="list_facebook_pages",
+        toolset="social-publisher",
+        schema=schemas.LIST_FACEBOOK_PAGES,
+        handler=tools.list_facebook_pages,
+    )
