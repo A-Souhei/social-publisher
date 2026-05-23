@@ -63,10 +63,13 @@ def _facebook_pages() -> list[dict]:
     _TOKEN for each N, and returns only complete triples sorted by N.
     Falls back to the legacy single-page env vars if no numbered pages found.
     """
-    pattern = re.compile(r"^FACEBOOK_PAGE_(\d+)_NAME$")
+    name_pattern = re.compile(r"^FACEBOOK_PAGE_(\d+)_NAME$")
+    numbered_key = re.compile(r"^FACEBOOK_PAGE_\d+_(NAME|ID|TOKEN)$")
+    any_numbered = any(numbered_key.match(k) for k in os.environ)
+
     numbered: dict[int, dict] = {}
     for key, value in os.environ.items():
-        m = pattern.match(key)
+        m = name_pattern.match(key)
         if m:
             n = int(m.group(1))
             name = value.strip()
@@ -78,7 +81,14 @@ def _facebook_pages() -> list[dict]:
     if numbered:
         return [numbered[n] for n in sorted(numbered)]
 
-    # Legacy fallback: single page from FACEBOOK_PAGE_ACCESS_TOKEN + FACEBOOK_PAGE_ID
+    # If the user opted into numbered mode (any FACEBOOK_PAGE_<N>_* key present) but
+    # no complete triple exists, do NOT fall back to the legacy single page — that
+    # would silently route to the wrong page on a typo/missing var. Report no pages.
+    if any_numbered:
+        return []
+
+    # Legacy fallback: single page from FACEBOOK_PAGE_ACCESS_TOKEN + FACEBOOK_PAGE_ID,
+    # only when no numbered vars are present at all.
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "").strip()
     page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip()
     if token and page_id:
@@ -324,6 +334,10 @@ def update_post(params: dict, **kwargs) -> str:
         if not post_id:
             return json.dumps({"error": "post_id is required"})
 
+        existing = scheduler.get_post(post_id)
+        if existing is None:
+            return json.dumps({"error": f"Post {post_id!r} not found"})
+
         fields = {}
         for key in ("text", "platforms", "image_path", "scheduled_time"):
             if key in params:
@@ -339,10 +353,28 @@ def update_post(params: dict, **kwargs) -> str:
             if invalid:
                 return json.dumps({"error": f"Invalid platforms: {invalid}. Allowed: {sorted(ALLOWED_PLATFORMS)}"})
 
-        if "facebook_page" in params:
+        # Resolve the Facebook page whenever the post will target facebook_page and
+        # FB is configured — mirrors create_post so we never leave fb_page unset on a
+        # FB-targeted post (which would fail at publish time).
+        result_platforms = fields.get("platforms", existing.get("platforms", []))
+        if "facebook_page" in result_platforms and _facebook_configured():
+            if "facebook_page" in params:
+                try:
+                    fields["fb_page"] = _resolve_facebook_page(params["facebook_page"])["name"]
+                except RuntimeError as e:
+                    return json.dumps({"error": str(e)})
+            elif not existing.get("fb_page"):
+                # No name supplied and none stored: auto-select if unambiguous,
+                # otherwise ask which page.
+                try:
+                    fields["fb_page"] = _resolve_facebook_page(None)["name"]
+                except RuntimeError as e:
+                    return json.dumps({"error": str(e)})
+            # else: keep the page already stored on the post
+        elif "facebook_page" in params and _facebook_configured():
+            # Page name given even though FB isn't (yet) a target — resolve & store it.
             try:
-                page = _resolve_facebook_page(params["facebook_page"])
-                fields["fb_page"] = page["name"]
+                fields["fb_page"] = _resolve_facebook_page(params["facebook_page"])["name"]
             except RuntimeError as e:
                 return json.dumps({"error": str(e)})
 
