@@ -29,18 +29,29 @@ def _ensure_images_dir():
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 
+_ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
 def _intern_image(image_path: str) -> str:
     """Copy image_path into IMAGES_DIR if it isn't already there.
 
     Returns the canonical path inside IMAGES_DIR so the backend can always
     find it under /data/images/<basename>.
+
+    Raises ValueError for missing files or disallowed extensions.
     """
     src = Path(image_path).resolve()
+    if not src.exists() or not src.is_file():
+        raise ValueError(f"Image file not found: {image_path}")
+    suffix = src.suffix.lower()
+    if suffix not in _ALLOWED_IMAGE_SUFFIXES:
+        raise ValueError(
+            f"Unsupported image type '{suffix}'. Allowed: {sorted(_ALLOWED_IMAGE_SUFFIXES)}"
+        )
     _ensure_images_dir()
     dest_dir = IMAGES_DIR.resolve()
     if src.parent == dest_dir:
         return str(src)
-    suffix = src.suffix or ".png"
     dest = dest_dir / f"{uuid.uuid4()}{suffix}"
     shutil.copy2(str(src), str(dest))
     return str(dest)
@@ -311,8 +322,6 @@ def create_post(params: dict, **kwargs) -> str:
     text = params.get("text", "").strip()
     platforms = params.get("platforms", [])
     image_path = params.get("image_path")
-    if image_path:
-        image_path = _intern_image(image_path)
     scheduled_time = params.get("scheduled_time")
     facebook_page_param = params.get("facebook_page")
 
@@ -326,6 +335,12 @@ def create_post(params: dict, **kwargs) -> str:
             return json.dumps({"error": f"Invalid platforms: {invalid}. Allowed: {sorted(ALLOWED_PLATFORMS)}"})
         if not platforms:
             return json.dumps({"error": "platforms must contain at least one entry"})
+
+        if image_path:
+            try:
+                image_path = _intern_image(image_path)
+            except ValueError as e:
+                return json.dumps({"error": str(e)})
 
         fb_page = None
         notes = []
