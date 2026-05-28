@@ -23,6 +23,7 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
 const PLATFORM_TABS: { value: PlatformFilter; label: string }[] = [
   { value: "all", label: "All Platforms" },
   { value: "linkedin_page", label: "LinkedIn" },
+  { value: "linkedin_personal", label: "LinkedIn (Personal)" },
   { value: "facebook_page", label: "Facebook" },
 ];
 

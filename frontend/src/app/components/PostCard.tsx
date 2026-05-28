@@ -44,7 +44,8 @@ function relativeLabel(iso: string | null | undefined): string {
 }
 
 const PLATFORM_LABELS: Record<Platform, string> = {
-  linkedin_page: "LinkedIn",
+  linkedin_page: "LinkedIn (Page)",
+  linkedin_personal: "LinkedIn (Personal)",
   facebook_page: "Facebook",
 };
 
@@ -168,6 +169,7 @@ export default function PostCard({ post }: PostCardProps) {
             imageUrl={post.image_url}
             scheduledTime={post.scheduled_time}
             createdAt={post.created_at}
+            isPersonal={activePlatform === "linkedin_personal"}
           />
         )}
       </div>

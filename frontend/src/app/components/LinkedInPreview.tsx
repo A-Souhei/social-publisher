@@ -5,6 +5,7 @@ interface LinkedInPreviewProps {
   imageUrl: string | null;
   scheduledTime: string | null;
   createdAt: string;
+  isPersonal?: boolean;
 }
 
 function relativeTime(iso: string | null): string {
@@ -29,6 +30,7 @@ export default function LinkedInPreview({
   imageUrl,
   scheduledTime,
   createdAt,
+  isPersonal = false,
 }: LinkedInPreviewProps) {
   const displayTime = relativeTime(scheduledTime ?? createdAt);
 
@@ -50,9 +52,11 @@ export default function LinkedInPreview({
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900 leading-tight">
-            Your LinkedIn Page
+            {isPersonal ? "Your LinkedIn Profile" : "Your LinkedIn Page"}
           </p>
-          <p className="text-xs text-gray-500 leading-tight">Company</p>
+          <p className="text-xs text-gray-500 leading-tight">
+            {isPersonal ? "1st" : "Company"}
+          </p>
           <p className="text-xs text-gray-400 mt-0.5">
             {displayTime} · 🌐
           </p>

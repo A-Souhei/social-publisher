@@ -1,4 +1,4 @@
-export type Platform = "linkedin_page" | "facebook_page";
+export type Platform = "linkedin_page" | "linkedin_personal" | "facebook_page";
 export type Status = "draft" | "scheduled" | "publishing" | "published" | "failed";
 
 export interface Post {
