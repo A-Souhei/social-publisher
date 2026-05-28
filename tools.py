@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import uuid
 import base64
 import tempfile
@@ -26,6 +27,23 @@ ALLOWED_PLATFORMS = {"linkedin_page", "facebook_page"}
 
 def _ensure_images_dir():
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _intern_image(image_path: str) -> str:
+    """Copy image_path into IMAGES_DIR if it isn't already there.
+
+    Returns the canonical path inside IMAGES_DIR so the backend can always
+    find it under /data/images/<basename>.
+    """
+    src = Path(image_path).resolve()
+    _ensure_images_dir()
+    dest_dir = IMAGES_DIR.resolve()
+    if src.parent == dest_dir:
+        return str(src)
+    suffix = src.suffix or ".png"
+    dest = dest_dir / f"{uuid.uuid4()}{suffix}"
+    shutil.copy2(str(src), str(dest))
+    return str(dest)
 
 
 def _openai_client() -> OpenAI:
@@ -293,6 +311,8 @@ def create_post(params: dict, **kwargs) -> str:
     text = params.get("text", "").strip()
     platforms = params.get("platforms", [])
     image_path = params.get("image_path")
+    if image_path:
+        image_path = _intern_image(image_path)
     scheduled_time = params.get("scheduled_time")
     facebook_page_param = params.get("facebook_page")
 
@@ -348,6 +368,8 @@ def update_post(params: dict, **kwargs) -> str:
         for key in ("text", "platforms", "image_path", "scheduled_time"):
             if key in params:
                 fields[key] = params[key]
+        if "image_path" in fields and fields["image_path"]:
+            fields["image_path"] = _intern_image(fields["image_path"])
 
         if "platforms" in fields:
             platforms = fields["platforms"]
