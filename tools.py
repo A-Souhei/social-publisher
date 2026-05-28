@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import uuid
 import base64
 import tempfile
@@ -222,6 +223,13 @@ def _facebook_post(text: str, page_id: str, page_token: str, image_path: str | N
 
 
 _linkedin_author_urn_cache: str | None = None
+_linkedin_urn_lock = threading.Lock()
+
+_LINKEDIN_UPLOAD_URL_PREFIXES = (
+    "https://api.linkedin.com/",
+    "https://media.licdn.com/",
+    "https://www.linkedin.com/",
+)
 
 
 def _linkedin_configured() -> bool:
@@ -230,25 +238,32 @@ def _linkedin_configured() -> bool:
 
 def _linkedin_author_urn() -> str:
     global _linkedin_author_urn_cache
-    if _linkedin_author_urn_cache:
-        return _linkedin_author_urn_cache
-    token = os.getenv("LINKEDIN_ACCESS_TOKEN", "").strip()
-    resp = requests.get(
-        "https://api.linkedin.com/v2/userinfo",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    sub = resp.json().get("sub", "")
-    if not sub:
-        raise RuntimeError("LinkedIn userinfo did not return a sub field")
-    urn = f"urn:li:person:{sub}"
-    _linkedin_author_urn_cache = urn
-    return urn
+    with _linkedin_urn_lock:
+        if _linkedin_author_urn_cache:
+            return _linkedin_author_urn_cache
+        token = os.getenv("LINKEDIN_ACCESS_TOKEN", "").strip()
+        resp = requests.get(
+            "https://api.linkedin.com/v2/userinfo",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        sub = resp.json().get("sub", "")
+        if not sub:
+            raise RuntimeError("LinkedIn userinfo did not return a sub field")
+        if not re.match(r"^[A-Za-z0-9_-]+$", sub):
+            raise RuntimeError(f"Unexpected LinkedIn sub format: {sub!r}")
+        urn = f"urn:li:person:{sub}"
+        _linkedin_author_urn_cache = urn
+        return urn
 
 
 def _linkedin_upload_image(image_path: str, author_urn: str, token: str) -> str:
     """Upload an image to LinkedIn and return its asset URN."""
+    resolved = Path(image_path).resolve()
+    if not resolved.is_relative_to(IMAGES_DIR.resolve()):
+        raise ValueError(f"image_path is outside IMAGES_DIR: {image_path!r}")
+
     register_resp = requests.post(
         "https://api.linkedin.com/v2/assets?action=registerUpload",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -267,6 +282,9 @@ def _linkedin_upload_image(image_path: str, author_urn: str, token: str) -> str:
     data = register_resp.json()
     upload_url = data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
     asset_urn = data["value"]["asset"]
+
+    if not any(upload_url.startswith(p) for p in _LINKEDIN_UPLOAD_URL_PREFIXES):
+        raise RuntimeError(f"Unexpected LinkedIn upload URL host: {upload_url!r}")
 
     with open(image_path, "rb") as f:
         put_resp = requests.put(
@@ -362,8 +380,10 @@ def _do_publish(post_id: str) -> None:
 
     if published_count > 0 and not errors:
         scheduler.update_post(post_id, status="published", published_at=now, error=None)
-    elif published_count > 0 and errors:
-        # Partial success: at least one platform published, surface the failures as a warning
+    elif published_count > 0:
+        # Partial success: at least one platform published but another failed or had missing
+        # credentials. Mark published so the post is not re-queued; surface the failures in
+        # the error field so the dashboard shows them.
         scheduler.update_post(post_id, status="published", published_at=now, error="; ".join(errors))
     else:
         scheduler.update_post(post_id, status="failed", error="; ".join(errors))
