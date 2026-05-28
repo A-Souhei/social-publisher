@@ -149,7 +149,7 @@ def _scheduler_loop():
             now = datetime.now(timezone.utc).isoformat()
             with _lock, _get_conn() as conn:
                 due = conn.execute(
-                    "SELECT * FROM posts WHERE status = 'scheduled' AND scheduled_time <= ? AND platforms LIKE '%facebook_page%'",
+                    "SELECT * FROM posts WHERE status = 'scheduled' AND scheduled_time <= ? AND (platforms LIKE '%facebook_page%' OR platforms LIKE '%linkedin_personal%')",
                     (now,),
                 ).fetchall()
                 for row in due:

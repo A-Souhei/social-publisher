@@ -22,7 +22,7 @@ QUALITY_ALIASES = {
     "high": "medium",
 }
 
-ALLOWED_PLATFORMS = {"linkedin_page", "facebook_page"}
+ALLOWED_PLATFORMS = {"linkedin_page", "linkedin_personal", "facebook_page"}
 
 
 def _ensure_images_dir():
@@ -221,35 +221,142 @@ def _facebook_post(text: str, page_id: str, page_token: str, image_path: str | N
     return resp.json()
 
 
+_linkedin_author_urn_cache: str | None = None
+
+
+def _linkedin_configured() -> bool:
+    return bool(os.getenv("LINKEDIN_ACCESS_TOKEN", "").strip())
+
+
+def _linkedin_author_urn() -> str:
+    global _linkedin_author_urn_cache
+    if _linkedin_author_urn_cache:
+        return _linkedin_author_urn_cache
+    token = os.getenv("LINKEDIN_ACCESS_TOKEN", "").strip()
+    resp = requests.get(
+        "https://api.linkedin.com/v2/userinfo",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    sub = resp.json().get("sub", "")
+    if not sub:
+        raise RuntimeError("LinkedIn userinfo did not return a sub field")
+    urn = f"urn:li:person:{sub}"
+    _linkedin_author_urn_cache = urn
+    return urn
+
+
+def _linkedin_upload_image(image_path: str, author_urn: str, token: str) -> str:
+    """Upload an image to LinkedIn and return its asset URN."""
+    register_resp = requests.post(
+        "https://api.linkedin.com/v2/assets?action=registerUpload",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={
+            "registerUploadRequest": {
+                "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+                "owner": author_urn,
+                "serviceRelationships": [
+                    {"relationshipType": "OWNER", "identifier": "urn:li:userGeneratedContent"}
+                ],
+            }
+        },
+        timeout=30,
+    )
+    register_resp.raise_for_status()
+    data = register_resp.json()
+    upload_url = data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
+    asset_urn = data["value"]["asset"]
+
+    with open(image_path, "rb") as f:
+        put_resp = requests.put(
+            upload_url,
+            headers={"Authorization": f"Bearer {token}"},
+            data=f,
+            timeout=120,
+        )
+    put_resp.raise_for_status()
+    return asset_urn
+
+
+def _linkedin_post(text: str, image_path: str | None = None) -> dict:
+    """Publish a post to the configured LinkedIn personal account."""
+    token = os.getenv("LINKEDIN_ACCESS_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("LINKEDIN_ACCESS_TOKEN is not configured")
+    author_urn = _linkedin_author_urn()
+
+    if image_path:
+        asset_urn = _linkedin_upload_image(image_path, author_urn, token)
+        share_content = {
+            "shareCommentary": {"text": text},
+            "shareMediaCategory": "IMAGE",
+            "media": [
+                {
+                    "status": "READY",
+                    "description": {"text": ""},
+                    "media": asset_urn,
+                    "title": {"text": ""},
+                }
+            ],
+        }
+    else:
+        share_content = {
+            "shareCommentary": {"text": text},
+            "shareMediaCategory": "NONE",
+        }
+
+    body = {
+        "author": author_urn,
+        "lifecycleState": "PUBLISHED",
+        "specificContent": {"com.linkedin.ugc.ShareContent": share_content},
+        "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"},
+    }
+    resp = requests.post(
+        "https://api.linkedin.com/v2/ugcPosts",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "X-Restli-Protocol-Version": "2.0.0"},
+        json=body,
+        timeout=30,
+    )
+    if not resp.ok:
+        detail = resp.text
+        try:
+            err = resp.json()
+            detail = f"{err.get('message', '')} (status={err.get('status')}, code={err.get('code')})"
+        except Exception:
+            pass
+        raise RuntimeError(f"LinkedIn {resp.status_code}: {detail}")
+    return resp.json()
+
+
 def _do_publish(post_id: str) -> None:
-    """
-    Publish the Facebook target of a stored post.
-    Called by the scheduler and publish_post tool.
-    If FB is not configured or the post has no facebook_page target, does nothing.
-    Updates post status on success or failure.
-    """
     post = scheduler.get_post(post_id)
     if post is None:
         return
 
-    if "facebook_page" not in post["platforms"]:
-        return
-
-    if not _facebook_configured():
-        return
-
+    platforms = post.get("platforms", [])
     now = datetime.now(timezone.utc).isoformat()
-    try:
-        page = _resolve_facebook_page(post.get("fb_page"))
-        _facebook_post(post["text"], page["id"], page["token"], post.get("image_path"))
-        scheduler.update_post(
-            post_id,
-            status="published",
-            published_at=now,
-            error=None,
-        )
-    except Exception as e:
-        scheduler.update_post(post_id, status="failed", error=str(e))
+    errors = []
+
+    if "facebook_page" in platforms:
+        if _facebook_configured():
+            try:
+                page = _resolve_facebook_page(post.get("fb_page"))
+                _facebook_post(post["text"], page["id"], page["token"], post.get("image_path"))
+            except Exception as e:
+                errors.append(f"Facebook: {e}")
+
+    if "linkedin_personal" in platforms:
+        if _linkedin_configured():
+            try:
+                _linkedin_post(post["text"], post.get("image_path"))
+            except Exception as e:
+                errors.append(f"LinkedIn: {e}")
+
+    if errors:
+        scheduler.update_post(post_id, status="failed", error="; ".join(errors))
+    else:
+        scheduler.update_post(post_id, status="published", published_at=now, error=None)
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +436,7 @@ def create_post(params: dict, **kwargs) -> str:
         if not text:
             return json.dumps({"error": "text is required"})
         if not isinstance(platforms, list) or not all(isinstance(p, str) for p in platforms):
-            return json.dumps({"error": "platforms must be a list of strings, e.g. [\"linkedin_page\", \"facebook_page\"]"})
+            return json.dumps({"error": "platforms must be a list of strings, e.g. [\"linkedin_page\", \"linkedin_personal\", \"facebook_page\"]"})
         invalid = [p for p in platforms if p not in ALLOWED_PLATFORMS]
         if invalid:
             return json.dumps({"error": f"Invalid platforms: {invalid}. Allowed: {sorted(ALLOWED_PLATFORMS)}"})
@@ -358,6 +465,11 @@ def create_post(params: dict, **kwargs) -> str:
 
         if "linkedin_page" in platforms:
             notes.append("LinkedIn posts are manual — copy the text from the dashboard and post manually.")
+        if "linkedin_personal" in platforms:
+            if _linkedin_configured():
+                notes.append("LinkedIn personal post will auto-publish.")
+            else:
+                notes.append("LINKEDIN_ACCESS_TOKEN is not configured — this LinkedIn post is manual.")
         if fb_page:
             notes.append(f"Facebook post targets page '{fb_page}' (auto-publishes).")
 
@@ -389,7 +501,7 @@ def update_post(params: dict, **kwargs) -> str:
         if "platforms" in fields:
             platforms = fields["platforms"]
             if not isinstance(platforms, list) or not all(isinstance(p, str) for p in platforms):
-                return json.dumps({"error": "platforms must be a list of strings, e.g. [\"linkedin_page\", \"facebook_page\"]"})
+                return json.dumps({"error": "platforms must be a list of strings, e.g. [\"linkedin_page\", \"linkedin_personal\", \"facebook_page\"]"})
             if not platforms:
                 return json.dumps({"error": "platforms must contain at least one entry"})
             invalid = [p for p in platforms if p not in ALLOWED_PLATFORMS]
@@ -441,15 +553,21 @@ def publish_post(params: dict, **kwargs) -> str:
         if post is None:
             return json.dumps({"error": f"Post {post_id!r} not found"})
 
-        if "facebook_page" not in post["platforms"]:
+        auto_platforms = [p for p in post["platforms"] if p in ("facebook_page", "linkedin_personal")]
+        if not auto_platforms:
             return json.dumps({
-                "note": "This post has no facebook_page target. Nothing to auto-publish — copy the text from the dashboard and post manually.",
+                "note": "This post has no auto-publish target (facebook_page or linkedin_personal). Nothing to auto-publish — copy the text from the dashboard and post manually.",
                 "post": post,
             })
 
-        if not _facebook_configured():
+        if "facebook_page" in auto_platforms and not _facebook_configured():
+            auto_platforms.remove("facebook_page")
+        if "linkedin_personal" in auto_platforms and not _linkedin_configured():
+            auto_platforms.remove("linkedin_personal")
+
+        if not auto_platforms:
             return json.dumps({
-                "note": "Facebook credentials (FACEBOOK_PAGE_ACCESS_TOKEN / FACEBOOK_PAGE_ID) are not configured. This post is manual.",
+                "note": "Auto-publish credentials are not configured for any target platform. This post is manual.",
                 "post": post,
             })
 

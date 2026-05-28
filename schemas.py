@@ -69,7 +69,8 @@ CREATE_POST = {
         "tool, not just replying with the text. The post only appears in the review dashboard after this "
         "call; if you skip it, the work is lost. If you generated or enhanced an image for this post "
         "(e.g. with generate_image), pass the file path it returned as image_path. "
-        "LinkedIn posts are manual — the user copies the text from the dashboard and posts manually. "
+        "LinkedIn page posts are manual — the user copies the text from the dashboard and posts manually. "
+        "LinkedIn personal posts auto-publish if LINKEDIN_ACCESS_TOKEN is configured; otherwise stored for manual reference. "
         "Facebook posts auto-publish (immediately or at the scheduled time) only if at least one Facebook "
         "page is configured; otherwise they are stored for manual reference. When more than one page is "
         "configured, set facebook_page to the target page's name (e.g. from 'post to <page>') — use "
@@ -87,9 +88,9 @@ CREATE_POST = {
                 "type": "array",
                 "items": {
                     "type": "string",
-                    "enum": ["linkedin_page", "facebook_page"]
+                    "enum": ["linkedin_page", "linkedin_personal", "facebook_page"]
                 },
-                "description": "Target platforms. linkedin_page = manual copy-paste; facebook_page = auto-publish if FB is configured.",
+                "description": "Target platforms. linkedin_page = manual copy-paste; linkedin_personal = auto-publish if LINKEDIN_ACCESS_TOKEN is configured; facebook_page = auto-publish if FB is configured.",
                 "minItems": 1
             },
             "image_path": {
@@ -144,7 +145,7 @@ UPDATE_POST = {
                 "type": "array",
                 "items": {
                     "type": "string",
-                    "enum": ["linkedin_page", "facebook_page"]
+                    "enum": ["linkedin_page", "linkedin_personal", "facebook_page"]
                 },
                 "minItems": 1,
                 "description": "Updated list of target platforms (at least one)"
