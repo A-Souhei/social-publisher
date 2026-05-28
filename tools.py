@@ -494,7 +494,7 @@ def create_post(params: dict, **kwargs) -> str:
         post = scheduler.create_post(text, platforms, image_path, scheduled_time, fb_page=fb_page)
 
         if "linkedin_page" in platforms:
-            notes.append("LinkedIn posts are manual — copy the text from the dashboard and post manually.")
+            notes.append("LinkedIn page posts are manual — copy the text from the dashboard and post manually.")
         if "linkedin_personal" in platforms:
             if _linkedin_configured():
                 notes.append("LinkedIn personal post will auto-publish.")

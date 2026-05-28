@@ -44,8 +44,8 @@ function relativeLabel(iso: string | null | undefined): string {
 }
 
 const PLATFORM_LABELS: Record<Platform, string> = {
-  linkedin_page: "LinkedIn",
-  linkedin_personal: "LinkedIn",
+  linkedin_page: "LinkedIn (Page)",
+  linkedin_personal: "LinkedIn (Personal)",
   facebook_page: "Facebook",
 };
 
