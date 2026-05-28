@@ -337,26 +337,36 @@ def _do_publish(post_id: str) -> None:
     platforms = post.get("platforms", [])
     now = datetime.now(timezone.utc).isoformat()
     errors = []
+    published_count = 0
 
     if "facebook_page" in platforms:
-        if _facebook_configured():
+        if not _facebook_configured():
+            errors.append("Facebook: credentials not configured")
+        else:
             try:
                 page = _resolve_facebook_page(post.get("fb_page"))
                 _facebook_post(post["text"], page["id"], page["token"], post.get("image_path"))
+                published_count += 1
             except Exception as e:
                 errors.append(f"Facebook: {e}")
 
     if "linkedin_personal" in platforms:
-        if _linkedin_configured():
+        if not _linkedin_configured():
+            errors.append("LinkedIn: LINKEDIN_ACCESS_TOKEN not configured")
+        else:
             try:
                 _linkedin_post(post["text"], post.get("image_path"))
+                published_count += 1
             except Exception as e:
                 errors.append(f"LinkedIn: {e}")
 
-    if errors:
-        scheduler.update_post(post_id, status="failed", error="; ".join(errors))
-    else:
+    if published_count > 0 and not errors:
         scheduler.update_post(post_id, status="published", published_at=now, error=None)
+    elif published_count > 0 and errors:
+        # Partial success: at least one platform published, surface the failures as a warning
+        scheduler.update_post(post_id, status="published", published_at=now, error="; ".join(errors))
+    else:
+        scheduler.update_post(post_id, status="failed", error="; ".join(errors))
 
 
 # ---------------------------------------------------------------------------
