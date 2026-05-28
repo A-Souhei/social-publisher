@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import uuid
 import base64
 import tempfile
@@ -26,6 +27,34 @@ ALLOWED_PLATFORMS = {"linkedin_page", "facebook_page"}
 
 def _ensure_images_dir():
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+_ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def _intern_image(image_path: str) -> str:
+    """Copy image_path into IMAGES_DIR if it isn't already there.
+
+    Returns the canonical path inside IMAGES_DIR so the backend can always
+    find it under /data/images/<basename>.
+
+    Raises ValueError for missing files or disallowed extensions.
+    """
+    src = Path(image_path).resolve()
+    if not src.exists() or not src.is_file():
+        raise ValueError(f"Image file not found: {image_path}")
+    suffix = src.suffix.lower()
+    if suffix not in _ALLOWED_IMAGE_SUFFIXES:
+        raise ValueError(
+            f"Unsupported image type '{suffix}'. Allowed: {sorted(_ALLOWED_IMAGE_SUFFIXES)}"
+        )
+    _ensure_images_dir()
+    dest_dir = IMAGES_DIR.resolve()
+    if src.parent == dest_dir:
+        return str(src)
+    dest = dest_dir / f"{uuid.uuid4()}{suffix}"
+    shutil.copy2(str(src), str(dest))
+    return str(dest)
 
 
 def _openai_client() -> OpenAI:
@@ -307,6 +336,12 @@ def create_post(params: dict, **kwargs) -> str:
         if not platforms:
             return json.dumps({"error": "platforms must contain at least one entry"})
 
+        if image_path:
+            try:
+                image_path = _intern_image(image_path)
+            except ValueError as e:
+                return json.dumps({"error": str(e)})
+
         fb_page = None
         notes = []
         if "facebook_page" in platforms:
@@ -348,6 +383,8 @@ def update_post(params: dict, **kwargs) -> str:
         for key in ("text", "platforms", "image_path", "scheduled_time"):
             if key in params:
                 fields[key] = params[key]
+        if "image_path" in fields and fields["image_path"]:
+            fields["image_path"] = _intern_image(fields["image_path"])
 
         if "platforms" in fields:
             platforms = fields["platforms"]
